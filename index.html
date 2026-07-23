@@ -24,7 +24,7 @@ html,body{
   background:var(--bg-0); color:var(--text);
   font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none;
-  touch-action:none;
+  touch-action:none; overscroll-behavior:none;
 }
 input,textarea{ -webkit-user-select:text; user-select:text; touch-action:manipulation; }
 button{ font-family:inherit; -webkit-user-select:none; user-select:none; touch-action:manipulation; }
@@ -174,10 +174,12 @@ select{ appearance:none; -webkit-appearance:none; background-image:linear-gradie
 #action-bar{
   position:absolute; left:0; right:0; bottom:0; z-index:20; display:flex; gap:8px; padding:8px 10px calc(8px + var(--safe-b));
   background:linear-gradient(0deg,rgba(10,13,18,.92),rgba(10,13,18,.55) 80%,transparent);
+  pointer-events:none; /* the gradient strip must not eat world touches; only the buttons are interactive */
 }
 .ab-btn{
   flex:1 1 0; min-height:var(--tap); border-radius:14px; border:1px solid var(--border-soft); background:var(--panel);
   color:var(--text); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; cursor:pointer; position:relative;
+  pointer-events:auto;
 }
 .ab-btn .ic{ font-size:1.15rem; line-height:1; }
 .ab-btn .lb{ font-size:.62rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--text-dim); }
@@ -1122,14 +1124,19 @@ const ALL_SHEET_IDS = ['panel-quests','panel-inventory','panel-world','panel-dia
 function closeAllSheets(){
   ALL_SHEET_IDS.forEach(id => $(id).classList.remove('open'));
   $('sheet-backdrop').classList.remove('open');
+  // Conversation over -> exploration must unfreeze. Without this, WorldScene.update()'s
+  // dialogue guard keeps returning early forever and movement appears "broken".
+  STATE.dialogue = null;
 }
 function openSheet(id){
   ALL_SHEET_IDS.forEach(sid => { if (sid!==id) $(sid).classList.remove('open'); });
+  if (id !== 'panel-dialogue') STATE.dialogue = null; // switching sheets away from a conversation ends it
   $(id).classList.add('open');
   $('sheet-backdrop').classList.add('open');
 }
 function closeSheet(id){
   $(id).classList.remove('open');
+  if (id === 'panel-dialogue') STATE.dialogue = null; // see closeAllSheets note
   const anyOpen = ALL_SHEET_IDS.some(sid => $(sid).classList.contains('open'));
   if (!anyOpen) $('sheet-backdrop').classList.remove('open');
 }
@@ -1375,6 +1382,104 @@ const POI_KINDS = ['village','ruins','camp','shrine','lair','portal','tower','ca
 const MAX_ENEMIES = 10;
 const MAX_NPCS = 8;
 
+/* ---- isometric presentation layer ----------------------------------------
+   All game LOGIC stays in the original orthogonal world space (player.x/y,
+   collision, distances, chunk keys, minimap). Only rendering projects into
+   isometric screen space. Cube art: 111x128 frames whose top-face diamond is
+   111x62 (measured from the Kenney PNGs), so one logical tile (32px) maps to
+   a 111x62 screen diamond. */
+const ISO = {
+  TILE_W: 111, TILE_H: 62, IMG_H: 128,
+  SX: 55.5 / TILE,   // screen px per logic px along the (x - y) axis
+  SY: 31 / TILE,     // screen px per logic px along the (x + y) axis
+};
+const ENTITY_DEPTH_BASE = 100000; // entities always render above ground chunk layers
+function projX(wx, wy){ return (wx - wy) * ISO.SX; }
+function projY(wx, wy){ return (wx + wy) * ISO.SY; }
+// Screen-space direction (drag/joystick/keys) -> normalized world-space direction,
+// so dragging toward an isometric diagonal walks along that exact diagonal.
+function unprojectDir(dx, dy){
+  const wx = dx / ISO.SX + dy / ISO.SY;
+  const wy = dy / ISO.SY - dx / ISO.SX;
+  const m = Math.hypot(wx, wy);
+  return m > 0.0001 ? { x: wx / m, y: wy / m } : { x: 0, y: 0 };
+}
+
+/* Curated Kenney cube tileset (assets/iso-tiles.png, 6 cols x 4 rows of 111x128
+   cells). topColor values were sampled from each cube's top face; biomes resolve
+   to their nearest-colored cube, so even exotic generated biomes always land on
+   something visually sensible. */
+const ISO_TILE_DEFS = [
+  { id:'grass',       topColor:'#43d17f' }, { id:'grass_dark', topColor:'#3db670' },
+  { id:'dirt',        topColor:'#c28d57' }, { id:'sand',       topColor:'#e3d5b7' },
+  { id:'stone',       topColor:'#95adaf' }, { id:'rock_dark',  topColor:'#76898b' },
+  { id:'water',       topColor:'#449fd4' }, { id:'ice',        topColor:'#b8ebfc' },
+  { id:'snow',        topColor:'#e9f9ff' }, { id:'lava_orange',topColor:'#ea792e' },
+  { id:'clay_red',    topColor:'#c26e57' }, { id:'mud',        topColor:'#bb8854' },
+  { id:'wood',        topColor:'#ac7d51' }, { id:'cobble',     topColor:'#9aaaa6' },
+  { id:'sandstone',   topColor:'#e9c772' }, { id:'metal',      topColor:'#929f9f' },
+  { id:'tan_brick',   topColor:'#cea278' }, { id:'teal_tile',  topColor:'#73bdbd' },
+  { id:'dark_slate',  topColor:'#454c54' }, { id:'dark_brown', topColor:'#5c4a46' },
+  { id:'dark_teal',   topColor:'#416570' }, { id:'blood_red',  topColor:'#df6065' },
+  { id:'alien_green', topColor:'#64b48a' }, { id:'mauve',      topColor:'#a681b6' },
+];
+const ISO_WATER_TILE = 6, ISO_VOID_TILE = 18;
+function hexToRGBObj(hex){
+  const n = parseInt(hex.replace('#',''), 16);
+  return { r:(n>>16)&255, g:(n>>8)&255, b:n&255 };
+}
+function rgbToHsl(c){
+  const r = c.r/255, g = c.g/255, b = c.b/255;
+  const max = Math.max(r,g,b), min = Math.min(r,g,b), l = (max+min)/2;
+  let h = 0, s = 0;
+  if (max !== min){
+    const d = max - min;
+    s = l > 0.5 ? d/(2-max-min) : d/(max+min);
+    h = max===r ? ((g-b)/d + (g<b?6:0)) : max===g ? ((b-r)/d + 2) : ((r-g)/d + 4);
+    h /= 6;
+  }
+  return { h, s, l };
+}
+/* Hue-first perceptual distance. Plain RGB distance fails here: the Kenney palette is
+   bright, so a dark saturated biome green sits numerically closer to dark gray than to
+   the bright grass cube — hue must dominate, with grays only matching grays. */
+const GRAY_S = 0.16;
+function tileMatchDistance(a, b){
+  let dh = Math.abs(a.h - b.h); if (dh > 0.5) dh = 1 - dh;
+  const ds = Math.abs(a.s - b.s), dl = Math.abs(a.l - b.l);
+  const aGray = a.s < GRAY_S, bGray = b.s < GRAY_S;
+  if (aGray && bGray) return dl;        // both neutral: match by lightness
+  if (aGray !== bGray) return 2 + dl;   // colored <-> gray only as a last resort
+  return dh*3 + ds*0.6 + dl*0.8;
+}
+const ISO_TILE_HSL = ISO_TILE_DEFS.map(t => rgbToHsl(hexToRGBObj(t.topColor)));
+const _biomeTileCache = new Map();
+function tileForBiome(biome){
+  const key = biome.genre + '|' + biome.id;
+  let hit = _biomeTileCache.get(key);
+  if (hit) return hit;
+  const c = hexToRGBObj(biome.colorHex);
+  let idx;
+  if (!biome.walkable){
+    // liquid-ish biomes read as water; dry chasms/voids read as a dark block
+    idx = (c.b > c.r && c.b >= c.g * 0.8) ? ISO_WATER_TILE : ISO_VOID_TILE;
+  } else {
+    const target = rgbToHsl(c);
+    let bestD = Infinity; idx = 0;
+    for (let i = 0; i < ISO_TILE_DEFS.length; i++){
+      if (i === ISO_WATER_TILE) continue;
+      const d = tileMatchDistance(target, ISO_TILE_HSL[i]);
+      if (d < bestD){ bestD = d; idx = i; }
+    }
+  }
+  // subtle tint toward the biome's own color keeps generated variety visible
+  const mix = (a,b) => Math.round(a + (b - a) * 0.3);
+  const tint = (mix(255,c.r) << 16) | (mix(255,c.g) << 8) | mix(255,c.b);
+  hit = { idx, tint };
+  _biomeTileCache.set(key, hit);
+  return hit;
+}
+
 function capitalize(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
 function chunkKey(cx,cy){ return cx+','+cy; }
 function chebyshev(ax,ay,bx,by){ return Math.max(Math.abs(ax-bx),Math.abs(ay-by)); }
@@ -1388,7 +1493,7 @@ const STATE = {
   distanceAccum:0, nextEventAt:260,
   combat:null, dialogue:null,
   scene:null, game:null, spawnPoint:{x:0,y:0},
-  joyVector:{x:0,y:0}, keys:null,
+  joyVector:{x:0,y:0}, dragVector:{x:0,y:0}, facingSector:2, keys:null,
   minimapCtx:null, lastMinimapDraw:0,
   nearestInteractable:null,
 };
@@ -1481,34 +1586,126 @@ function evictExcessChunks(){
   entries.sort((a,b) => chebyshev(b[1].cx,b[1].cy,pcx,pcy) - chebyshev(a[1].cx,a[1].cy,pcx,pcy));
   const toRemove = entries.slice(0, STATE.chunkCache.size - MAX_CACHED_CHUNKS);
   toRemove.forEach(([key,data]) => {
-    if (data.tileImage) data.tileImage.destroy();
-    data.poiSprites.forEach(s => s.destroy());
-    if (STATE.scene && STATE.scene.textures.exists('chk_'+key+'_'+STATE.worldConfig.zoneIndex)) STATE.scene.textures.remove('chk_'+key+'_'+STATE.worldConfig.zoneIndex);
+    destroyChunkVisuals(data);
     STATE.chunkCache.delete(key);
     // Drop this chunk's POIs from the global list too -- otherwise STATE.pois grows unbounded
     // over a long play session and every per-frame proximity/minimap scan slows down with it.
     STATE.pois = STATE.pois.filter(p => !(p.cx===data.cx && p.cy===data.cy));
   });
 }
+function destroyChunkVisuals(data){
+  if (data.isoMap){ data.isoMap.destroy(); data.isoMap = null; data.tileImage = null; }
+  else if (data.tileImage){ data.tileImage.destroy(); data.tileImage = null; }
+  data.poiSprites.forEach(s => { if (STATE.scene) STATE.scene.tweens.killTweensOf(s); s.destroy(); });
+  data.poiSprites = [];
+}
 
 /* ==================================================================
    12. PHASER — BOOT SCENE (procedural sprite textures)
    ================================================================== */
+/* Maps our 8 screen-direction sectors (0=E, 1=SE, 2=S, 3=SW, 4=W, 5=NW, 6=N, 7=NE,
+   from atan2 of the on-screen movement vector) onto the character sheet's rows. The
+   Kenney sheet orders rows counterclockwise starting West (0=W,1=NW,...,7=SW) —
+   calibrated visually from a labeled in-engine collage of every row's run frame. */
+const DIR_TO_ROW = [4, 5, 6, 7, 0, 1, 2, 3];
+const HERO_COLS = 5; // idle, run x4 per row
 class BootScene extends Phaser.Scene{
   constructor(){ super('BootScene'); }
+  preload(){
+    this.assetFailed = false;
+    this.load.on('loaderror', () => { this.assetFailed = true; });
+    this.load.image('isoTiles', 'assets/iso-tiles.png');
+    this.load.spritesheet('hero', 'assets/character.png', { frameWidth: 64, frameHeight: 128 });
+  }
   create(){
     const g = this.add.graphics();
-    // base shapes, tinted per-use at runtime
+    // flat marker shapes (POI glyphs, minimap), tinted per-use at runtime
     g.clear(); g.fillStyle(0xffffff,1); g.fillCircle(16,16,14); g.generateTexture('shape_circle',32,32); g.clear();
     g.fillStyle(0xffffff,1); g.fillRoundedRect(2,2,28,28,6); g.generateTexture('shape_square',32,32); g.clear();
     g.fillStyle(0xffffff,1); g.beginPath(); g.moveTo(16,1); g.lineTo(31,16); g.lineTo(16,31); g.lineTo(1,16); g.closePath(); g.fillPath(); g.generateTexture('shape_diamond',32,32); g.clear();
     g.fillStyle(0xffffff,1); g.beginPath(); g.moveTo(16,2); g.lineTo(30,29); g.lineTo(2,29); g.closePath(); g.fillPath(); g.generateTexture('shape_triangle',32,32); g.clear();
-    // player marker: circle + direction notch
+    // player marker: circle + direction notch (legacy/minimap use)
     g.fillStyle(0xffffff,1); g.fillCircle(16,16,13);
     g.fillStyle(0x000000,0.35); g.fillTriangle(16,3,22,13,10,13);
     g.generateTexture('shape_player',32,32); g.clear();
+    // soft ellipse shadow for characters
+    g.fillStyle(0x000000,0.3); g.fillEllipse(32,12,56,20); g.generateTexture('shadow',64,24); g.clear();
     g.destroy();
+
+    if (this.assetFailed || !this.textures.exists('isoTiles') || !this.textures.exists('hero')){
+      // Assets unreachable (e.g. file:// without the assets folder) -> build equivalent
+      // procedural textures under the SAME keys so everything downstream still works.
+      buildProceduralIsoTiles(this);
+      buildProceduralHeroSheet(this);
+    }
+    buildHeroAnims(this);
     this.scene.start('WorldScene');
+  }
+}
+/* Fallback tileset: flat-shaded cubes matching ISO_TILE_DEFS colors, 6x4 grid of 111x128. */
+function buildProceduralIsoTiles(scene){
+  if (scene.textures.exists('isoTiles')) scene.textures.remove('isoTiles');
+  const cols = 6, rows = 4, W = ISO.TILE_W, H = ISO.IMG_H, DH = ISO.TILE_H;
+  const tex = scene.textures.createCanvas('isoTiles', cols*W, rows*H);
+  const ctx = tex.getContext();
+  const shade = (hex, f) => {
+    const c = hexToRGBObj(hex);
+    const m = (v) => Math.max(0, Math.min(255, Math.round(v*f)));
+    return 'rgb('+m(c.r)+','+m(c.g)+','+m(c.b)+')';
+  };
+  ISO_TILE_DEFS.forEach((def, i) => {
+    const ox = (i%cols)*W, oy = Math.floor(i/cols)*H;
+    const midX = ox+W/2, half = DH/2;
+    ctx.fillStyle = shade(def.topColor, 1);
+    ctx.beginPath(); ctx.moveTo(midX, oy); ctx.lineTo(ox+W, oy+half); ctx.lineTo(midX, oy+DH); ctx.lineTo(ox, oy+half); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = shade(def.topColor, 0.72); // left face
+    ctx.beginPath(); ctx.moveTo(ox, oy+half); ctx.lineTo(midX, oy+DH); ctx.lineTo(midX, oy+H); ctx.lineTo(ox, oy+H-half); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = shade(def.topColor, 0.55); // right face
+    ctx.beginPath(); ctx.moveTo(ox+W, oy+half); ctx.lineTo(midX, oy+DH); ctx.lineTo(midX, oy+H); ctx.lineTo(ox+W, oy+H-half); ctx.closePath(); ctx.fill();
+  });
+  tex.refresh();
+}
+/* Fallback character: simple shaded figure, 8 rows x 5 frames of 64x128, walk = leg swap + bob. */
+function buildProceduralHeroSheet(scene){
+  if (scene.textures.exists('hero')) scene.textures.remove('hero');
+  const cols = HERO_COLS, rows = 8, W = 64, H = 128;
+  const tex = scene.textures.createCanvas('hero', cols*W, rows*H);
+  const ctx = tex.getContext();
+  for (let row = 0; row < rows; row++){
+    const sector = DIR_TO_ROW.indexOf(row);
+    const ang = (sector >= 0 ? sector : row) * Math.PI/4;
+    for (let f = 0; f < cols; f++){
+      const oy = row*H;
+      const cx = f*W + W/2, feet = oy + 114;
+      const bob = f===0 ? 0 : Math.sin((f-1)/4*Math.PI*2)*2;
+      const legPhase = f===0 ? 0 : ((f%2===1) ? 4 : -4);
+      ctx.fillStyle = '#8f8f8f';
+      ctx.fillRect(cx-7+legPhase*0.4, feet-18+bob, 5, 18-bob); // legs
+      ctx.fillRect(cx+2-legPhase*0.4, feet-18+bob, 5, 18-bob);
+      ctx.fillStyle = '#b5b5b5';
+      ctx.beginPath(); ctx.ellipse(cx, feet-28+bob, 10, 13, 0, 0, Math.PI*2); ctx.fill(); // torso
+      ctx.fillStyle = '#d8d8d8';
+      ctx.beginPath(); ctx.arc(cx, feet-46+bob, 8, 0, Math.PI*2); ctx.fill(); // head
+      ctx.fillStyle = '#5a5a5a'; // facing dot
+      ctx.beginPath(); ctx.arc(cx + Math.cos(ang)*5, feet-46+bob + Math.sin(ang)*3, 2.5, 0, Math.PI*2); ctx.fill();
+    }
+  }
+  tex.refresh();
+  // register uniform frames so anims/generateFrameNumbers work like a spritesheet
+  for (let i = 0; i < cols*rows; i++){
+    tex.add(i, 0, (i%cols)*W, Math.floor(i/cols)*H, W, H);
+  }
+}
+function buildHeroAnims(scene){
+  for (let sector = 0; sector < 8; sector++){
+    const row = DIR_TO_ROW[sector];
+    const base = row * HERO_COLS;
+    if (!scene.anims.exists('idle_'+sector)){
+      scene.anims.create({ key: 'idle_'+sector, frames: [{ key:'hero', frame: base }], frameRate: 1 });
+    }
+    if (!scene.anims.exists('walk_'+sector)){
+      scene.anims.create({ key: 'walk_'+sector, frames: scene.anims.generateFrameNumbers('hero', { start: base+1, end: base+4 }), frameRate: 10, repeat: -1 });
+    }
   }
 }
 
@@ -1519,21 +1716,54 @@ class WorldScene extends Phaser.Scene{
   constructor(){ super('WorldScene'); }
   create(){
     STATE.scene = this;
+    this.input.addPointer(2); // joystick finger + canvas-drag finger + UI tap can coexist
 
     startZone(false);
 
-    // Added directly to the scene (not wrapped in a Container) so its depth of 50
-    // sorts correctly against POI/NPC/enemy sprites, which are also added directly.
-    this.playerSprite = this.add.image(STATE.player.x, STATE.player.y, 'shape_player').setDepth(50);
+    const psx = projX(STATE.player.x, STATE.player.y), psy = projY(STATE.player.x, STATE.player.y);
+    this.playerShadow = this.add.image(psx, psy, 'shadow').setDepth(ENTITY_DEPTH_BASE - 1).setScale(0.8);
+    this.playerSprite = this.add.sprite(psx, psy, 'hero').setOrigin(0.5, 0.89).setScale(2);
     this.playerSprite.setTint(genreAccentColor(STATE.worldConfig.genre));
+    this.playerSprite.play('idle_2');
     STATE.playerSpriteRef = this.playerSprite;
+    STATE.facingSector = 2; // start facing screen-south
 
-    this.cameras.main.startFollow(this.playerSprite, true, 0.12, 0.12);
+    // camera follows an invisible target pinned to the projected player position
+    this.cameraTarget = this.add.rectangle(psx, psy, 4, 4, 0x000000, 0);
+    this.cameras.main.startFollow(this.cameraTarget, true, 0.12, 0.12);
     this.cameras.main.setZoom(1);
     this.cameras.main.setBackgroundColor(0x0a0d12);
 
     this.cursors = this.input.keyboard.createCursorKeys();
     this.wasd = this.input.keyboard.addKeys({ up:'W', down:'S', left:'A', right:'D' });
+
+    // Canvas-wide press-drag movement: works anywhere on the game view (not just the
+    // bottom-left joystick zone). A short sub-threshold press is a tap and leaves
+    // sprite pointerdown handlers (NPC talk / enemy engage) to do their thing.
+    this.canvasDrag = { active:false, startX:0, startY:0, moved:false };
+    this.input.on('pointerdown', (p) => {
+      this.canvasDrag.active = true; this.canvasDrag.moved = false;
+      this.canvasDrag.startX = p.x; this.canvasDrag.startY = p.y;
+    });
+    this.input.on('pointermove', (p) => {
+      if (!this.canvasDrag.active || !p.isDown) return;
+      const dx = p.x - this.canvasDrag.startX, dy = p.y - this.canvasDrag.startY;
+      const d = Math.hypot(dx, dy);
+      if (!this.canvasDrag.moved && d > 12) this.canvasDrag.moved = true;
+      if (this.canvasDrag.moved && d > 0.001){
+        const clamp60 = Math.min(1, d / 60);
+        STATE.dragVector.x = (dx / d) * clamp60;
+        STATE.dragVector.y = (dy / d) * clamp60;
+      }
+    });
+    const endDrag = () => {
+      this.canvasDrag.active = false; this.canvasDrag.moved = false;
+      STATE.dragVector.x = 0; STATE.dragVector.y = 0;
+    };
+    this.input.on('pointerup', endDrag);
+    this.input.on('pointerupoutside', endDrag);
+    this.input.on('gameout', endDrag);
+    document.addEventListener('visibilitychange', () => { endDrag(); STATE.joyVector.x = 0; STATE.joyVector.y = 0; });
 
     this.scale.on('resize', (size) => { this.cameras.main.setSize(size.width, size.height); });
 
@@ -1546,27 +1776,44 @@ class WorldScene extends Phaser.Scene{
     const dt = Math.min(delta, 50) / 1000;
     if (STATE.combat || STATE.dialogue) { return; } // freeze exploration while a modal system is active
 
-    let vx = 0, vy = 0;
-    if (this.cursors.left.isDown || this.wasd.left.isDown) vx -= 1;
-    if (this.cursors.right.isDown || this.wasd.right.isDown) vx += 1;
-    if (this.cursors.up.isDown || this.wasd.up.isDown) vy -= 1;
-    if (this.cursors.down.isDown || this.wasd.down.isDown) vy += 1;
-    if (vx===0 && vy===0 && (STATE.joyVector.x||STATE.joyVector.y)){ vx = STATE.joyVector.x; vy = STATE.joyVector.y; }
-    const mag = Math.hypot(vx,vy);
-    if (mag>1){ vx/=mag; vy/=mag; }
+    // ---- gather SCREEN-SPACE intent, rebuilt from zero every frame (nothing persists) ----
+    let sdx = 0, sdy = 0;
+    if (this.cursors.left.isDown || this.wasd.left.isDown) sdx -= 1;
+    if (this.cursors.right.isDown || this.wasd.right.isDown) sdx += 1;
+    if (this.cursors.up.isDown || this.wasd.up.isDown) sdy -= 1;
+    if (this.cursors.down.isDown || this.wasd.down.isDown) sdy += 1;
+    if (sdx===0 && sdy===0 && (STATE.joyVector.x||STATE.joyVector.y)){ sdx = STATE.joyVector.x; sdy = STATE.joyVector.y; }
+    if (sdx===0 && sdy===0 && (STATE.dragVector.x||STATE.dragVector.y)){ sdx = STATE.dragVector.x; sdy = STATE.dragVector.y; }
+    let mag = Math.hypot(sdx, sdy);
+    if (mag > 1){ sdx /= mag; sdy /= mag; mag = 1; }
 
     const speed = 168;
-    if (mag>0.05){
-      const nx = STATE.player.x + vx*speed*dt;
+    const moving = mag > 0.05;
+    if (moving){
+      // screen intent -> isometric world direction, so a drag toward an iso diagonal
+      // walks exactly along that diagonal
+      const dir = unprojectDir(sdx, sdy);
+      const nx = STATE.player.x + dir.x*mag*speed*dt;
       if (!collidesAt(nx, STATE.player.y)) STATE.player.x = nx;
-      const ny = STATE.player.y + vy*speed*dt;
+      const ny = STATE.player.y + dir.y*mag*speed*dt;
       if (!collidesAt(STATE.player.x, ny)) STATE.player.y = ny;
-      this.playerSprite.x = STATE.player.x; this.playerSprite.y = STATE.player.y;
-      accumulateExplorationDistance(Math.hypot(vx,vy)*speed*dt);
+      accumulateExplorationDistance(mag*speed*dt);
+      // facing/animation from the on-screen direction: 8 sectors, 0=E clockwise
+      STATE.facingSector = ((Math.round(Math.atan2(sdy, sdx) / (Math.PI/4)) % 8) + 8) % 8;
     }
+    const animKey = (moving ? 'walk_' : 'idle_') + STATE.facingSector;
+    if (this.playerSprite.anims.currentAnim === null || this.playerSprite.anims.currentAnim.key !== animKey) this.playerSprite.play(animKey);
+
+    // project player + shadow + camera target into screen space
+    const psx = projX(STATE.player.x, STATE.player.y), psy = projY(STATE.player.x, STATE.player.y);
+    this.playerSprite.x = psx; this.playerSprite.y = psy;
+    this.playerSprite.setDepth(ENTITY_DEPTH_BASE + psy);
+    this.playerShadow.x = psx; this.playerShadow.y = psy + 2;
+    this.cameraTarget.x = psx; this.cameraTarget.y = psy;
 
     processChunkStreaming(this);
     updateEnemies(this, dt);
+    updateNPCVisuals(this, dt);
     updateInteractProximity();
     redrawMinimap(false);
   }
@@ -1600,26 +1847,63 @@ function processChunkStreaming(scene){
     }
   }
 }
+/* Builds one native isometric tilemap per chunk (Phaser.Tilemaps.Orientation.ISOMETRIC,
+   supported since 3.50). The 3.85 `make.tilemap` factory does not forward an orientation
+   option for blank maps, so we construct MapData directly — createBlankLayer copies the
+   map's orientation into its LayerData, which is what the per-tile iso math reads. */
+function createIsoChunkMap(scene){
+  const mapData = new Phaser.Tilemaps.MapData({
+    name: 'chunk', tileWidth: ISO.TILE_W, tileHeight: ISO.TILE_H,
+    width: CHUNK_SIZE, height: CHUNK_SIZE,
+    orientation: Phaser.Tilemaps.Orientation.ISOMETRIC,
+    format: Phaser.Tilemaps.Formats.ARRAY_2D,
+  });
+  return new Phaser.Tilemaps.Tilemap(scene, mapData);
+}
 function renderChunkToScene(scene, data){
-  const g = scene.add.graphics();
+  const map = createIsoChunkMap(scene);
+  // tileset frames are 111x128 (cube with body below the 111x62 top diamond)
+  const tileset = map.addTilesetImage('isoTiles', 'isoTiles', ISO.TILE_W, ISO.IMG_H, 0, 0);
+  // chunk tile (0,0) is global tile (cx*16, cy*16); its projected center must land at
+  // ((gx-gy)*W2, (gx+gy)*H2) — Phaser places local (i,j) at ((i-j)*W2, (i+j)*H2) + layer pos
+  const offX = (data.cx - data.cy) * CHUNK_SIZE * (ISO.TILE_W / 2);
+  const offY = (data.cx + data.cy) * CHUNK_SIZE * (ISO.TILE_H / 2);
+  // Two layers per chunk: walkable ground at grade, liquids/voids sunk 18px lower.
+  // Absent ground tiles at the boundary expose neighbouring cube side-faces, which is
+  // what makes shorelines and chasms read as actual cliffs instead of flat色 seams.
+  const depthBase = (data.cx + data.cy) + 500;
+  const liquid = map.createBlankLayer('liquid', tileset, offX, offY + 18);
+  const layer = map.createBlankLayer('ground', tileset, offX, offY);
+  liquid.setDepth(depthBase - 0.5);
+  layer.setDepth(depthBase);
   for (let ty=0; ty<CHUNK_SIZE; ty++){
     for (let tx=0; tx<CHUNK_SIZE; tx++){
       const b = data.biomeGrid[ty*CHUNK_SIZE+tx];
-      const useShade = ((tx*7+ty*13+data.cx*3+data.cy*5) % 5 === 0);
-      g.fillStyle(Phaser.Display.Color.HexStringToColor(useShade?b.shadeHex:b.colorHex).color, 1);
-      g.fillRect(tx*TILE, ty*TILE, TILE, TILE);
+      const t = tileForBiome(b);
+      const target = b.walkable ? layer : liquid;
+      const tile = target.putTileAt(t.idx, tx, ty);
+      if (tile){
+        // deterministic per-tile brightness jitter so large single-biome fields
+        // read as mottled terrain rather than one flat color (gentler on liquids)
+        const jit = b.walkable ? 0.18 : 0.08;
+        const v = (1 - jit/2) + hashLattice(data.cx*CHUNK_SIZE+tx, data.cy*CHUNK_SIZE+ty, 7717) * jit;
+        const r = Math.min(255, Math.round(((t.tint>>16)&255) * v));
+        const g = Math.min(255, Math.round(((t.tint>>8)&255) * v));
+        const bl = Math.min(255, Math.round((t.tint&255) * v));
+        tile.tint = (r<<16)|(g<<8)|bl;
+      }
     }
   }
-  const texKey = 'chk_'+data.cx+','+data.cy+'_'+STATE.worldConfig.zoneIndex;
-  if (scene.textures.exists(texKey)) scene.textures.remove(texKey);
-  g.generateTexture(texKey, CHUNK_PX, CHUNK_PX);
-  g.destroy();
-  const img = scene.add.image(data.cx*CHUNK_PX, data.cy*CHUNK_PX, texKey).setOrigin(0,0).setDepth(0);
-  data.tileImage = img;
+  data.isoMap = map;
+  data.tileImage = layer; // kept under the old property name; destroy path handles both
   data.poiSprites = data.pois.map(poi => {
     const shape = { village:'shape_square', ruins:'shape_square', camp:'shape_square', shrine:'shape_diamond', lair:'shape_triangle', portal:'shape_diamond', tower:'shape_triangle', cave:'shape_triangle' }[poi.kind] || 'shape_square';
-    const s = scene.add.image(poi.worldX, poi.worldY, shape).setDepth(10).setScale(0.85);
+    const sx = projX(poi.worldX, poi.worldY), sy = projY(poi.worldX, poi.worldY);
+    // floating quest-marker style: small glyph bobbing above the tile
+    const s = scene.add.image(sx, sy - 48, shape).setScale(0.65);
+    s.setDepth(ENTITY_DEPTH_BASE + sy - 1);
     s.setTint(Phaser.Display.Color.HexStringToColor(poi.glyphColorHex).color);
+    scene.tweens.add({ targets: s, y: sy - 58, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     return s;
   });
 }
@@ -1665,6 +1949,7 @@ function setupJoystick(){
   const maxR = 46;
   let originX=0, originY=0, active=false;
   function start(e){
+    e.preventDefault(); // stop iOS Safari scroll/zoom gestures from hijacking the touch
     active=true;
     originX=e.clientX; originY=e.clientY;
     base.style.left=(originX-48)+'px'; base.style.top=(originY-48)+'px'; base.style.display='block';
@@ -1673,6 +1958,7 @@ function setupJoystick(){
   }
   function move(e){
     if (!active) return;
+    e.preventDefault();
     let dx=e.clientX-originX, dy=e.clientY-originY;
     const d=Math.hypot(dx,dy);
     if (d>maxR){ dx=dx/d*maxR; dy=dy/d*maxR; }
@@ -1694,13 +1980,12 @@ function setupJoystick(){
    ================================================================== */
 function startZone(isRegen){
   const wc = STATE.worldConfig;
-  STATE.chunkCache.forEach(data => { if (data.tileImage) data.tileImage.destroy(); data.poiSprites.forEach(s=>s.destroy()); });
+  STATE.chunkCache.forEach(data => destroyChunkVisuals(data));
   STATE.chunkCache.clear(); STATE.chunkLoadQueue.length = 0; STATE.exploredCells.clear();
   STATE.npcs.forEach(n => { if (n.sprite) n.sprite.destroy(); }); STATE.npcs = [];
   STATE.enemies.forEach(e => { if (e.sprite) e.sprite.destroy(); }); STATE.enemies = [];
   STATE.pois = []; STATE.usedPOINames = new Set();
   STATE.distanceAccum = 0; STATE.nextEventAt = 260;
-  if (STATE.scene) STATE.scene.textures.getTextureKeys().filter(k => k.indexOf('chk_')===0).forEach(k => STATE.scene.textures.remove(k));
 
   STATE.noise = new NoiseFields(wc.seed+'|zone'+wc.zoneIndex);
   STATE.layoutSalt = hashToInt(wc.seed+'|layout|zone'+wc.zoneIndex) % 100000;
@@ -1717,7 +2002,7 @@ function startZone(isRegen){
 
   STATE.player.x = spawnPOI.worldX; STATE.player.y = spawnPOI.worldY;
   STATE.spawnPoint = { x:spawnPOI.worldX, y:spawnPOI.worldY };
-  if (STATE.playerSpriteRef){ STATE.playerSpriteRef.x = STATE.player.x; STATE.playerSpriteRef.y = STATE.player.y; }
+  snapPlayerSprite();
 
   if (STATE.scene) renderChunkToScene(STATE.scene, spawnData);
 
@@ -1727,10 +2012,20 @@ function startZone(isRegen){
   updateQuestBadge();
   if (isRegen){ renderQuestLog(); showToast('The realm shifts — a new region unfolds.','info'); }
 }
+function snapPlayerSprite(){
+  if (!STATE.playerSpriteRef) return;
+  const sx = projX(STATE.player.x, STATE.player.y), sy = projY(STATE.player.x, STATE.player.y);
+  STATE.playerSpriteRef.x = sx; STATE.playerSpriteRef.y = sy;
+  STATE.playerSpriteRef.setDepth(ENTITY_DEPTH_BASE + sy);
+  if (STATE.scene){
+    if (STATE.scene.playerShadow){ STATE.scene.playerShadow.x = sx; STATE.scene.playerShadow.y = sy + 2; }
+    if (STATE.scene.cameraTarget){ STATE.scene.cameraTarget.x = sx; STATE.scene.cameraTarget.y = sy; }
+  }
+}
 function reviveAtSpawn(){
   STATE.player.x = STATE.spawnPoint.x; STATE.player.y = STATE.spawnPoint.y;
   STATE.player.hp = Math.max(1, Math.round(STATE.player.maxHp*0.4));
-  if (STATE.playerSpriteRef){ STATE.playerSpriteRef.x = STATE.player.x; STATE.playerSpriteRef.y = STATE.player.y; }
+  snapPlayerSprite();
   updateHUD();
 }
 
@@ -1752,9 +2047,16 @@ function generateNPCsAndQuests(isRegen){
     const place = spawnPOI ? spawnPOI.name : 'this place';
     const faction = wc.factions.length ? rng.pick(wc.factions).name : 'the locals';
     const tokens = { name, place, faction };
-    const angle = rng.range(0,Math.PI*2), rad = rng.range(24,120);
-    const baseX = (spawnPOI?spawnPOI.worldX:STATE.player.x) + Math.cos(angle)*rad;
-    const baseY = (spawnPOI?spawnPOI.worldY:STATE.player.y) + Math.sin(angle)*rad;
+    // place on walkable ground: retry with shrinking radius, falling back to the POI tile
+    const anchorX = spawnPOI ? spawnPOI.worldX : STATE.player.x;
+    const anchorY = spawnPOI ? spawnPOI.worldY : STATE.player.y;
+    let baseX = anchorX, baseY = anchorY;
+    for (let attempt = 0; attempt < 14; attempt++){
+      const angle = rng.range(0, Math.PI*2);
+      const rad = rng.range(24, 120) * (1 - attempt/16);
+      const cx = anchorX + Math.cos(angle)*rad, cy = anchorY + Math.sin(angle)*rad;
+      if (walkableAtPixel(cx, cy)){ baseX = cx; baseY = cy; break; }
+    }
     const colorDesc = pickPOIDescriptor(rng, wc.genre, 'village');
     npcs.push({
       id:'npc_'+i+'_'+wc.zoneIndex, name, role:tpl.role, genre:wc.genre, faction,
@@ -1847,9 +2149,13 @@ function enemyThemeWord(wc){ return capitalize(String(wc.threat||'beasts').repla
 function lootThemeWord(rng, wc){ return pickLootItem(rng, wc.genre, 'common', 'material').nameTemplate; }
 
 function renderNPCSprites(scene){
-  STATE.npcs.forEach(npc => {
-    const s = scene.add.image(npc.x, npc.y, 'shape_circle').setDepth(8).setScale(0.8);
+  STATE.npcs.forEach((npc, i) => {
+    const sx = projX(npc.x, npc.y), sy = projY(npc.x, npc.y);
+    const s = scene.add.sprite(sx, sy, 'hero').setOrigin(0.5, 0.89).setScale(1.8);
     s.setTint(Phaser.Display.Color.HexStringToColor(npc.colorHex).color);
+    npc.facingSector = i % 8; // varied idle facings around the village
+    s.play('idle_' + npc.facingSector);
+    s.setDepth(ENTITY_DEPTH_BASE + sy);
     s.setInteractive({ useHandCursor:true });
     s.on('pointerdown', () => {
       const d = Math.hypot(STATE.player.x-npc.x, STATE.player.y-npc.y);
@@ -1858,6 +2164,26 @@ function renderNPCSprites(scene){
     });
     npc.sprite = s;
   });
+}
+/* NPCs are stationary; keep their projected position/depth in sync (cheap) and make
+   them face the player when they are close enough to interact. */
+function updateNPCVisuals(scene, dt){
+  for (let i=0;i<STATE.npcs.length;i++){
+    const npc = STATE.npcs[i];
+    if (!npc.sprite) continue;
+    const sx = projX(npc.x, npc.y), sy = projY(npc.x, npc.y);
+    npc.sprite.x = sx; npc.sprite.y = sy;
+    npc.sprite.setDepth(ENTITY_DEPTH_BASE + sy);
+    const d = Math.hypot(STATE.player.x-npc.x, STATE.player.y-npc.y);
+    if (d < INTERACT_RANGE*1.6){
+      const fdx = projX(STATE.player.x,STATE.player.y)-sx, fdy = projY(STATE.player.x,STATE.player.y)-sy;
+      const sector = ((Math.round(Math.atan2(fdy,fdx)/(Math.PI/4))%8)+8)%8;
+      if (sector !== npc.facingSector){
+        npc.facingSector = sector;
+        npc.sprite.play('idle_'+sector);
+      }
+    }
+  }
 }
 
 function openDialogueWithNPC(npc){
@@ -2030,8 +2356,12 @@ function spawnEnemiesForChunk(scene, chunkData){
     x:wx, y:wy, homeX:wx, homeY:wy, chunkKey:chunkKey(chunkData.cx,chunkData.cy),
     sprite:null, wanderTimer:rng.range(0,2), targetX:undefined, targetY:undefined,
   };
-  enemy.sprite = scene.add.image(wx,wy,'shape_triangle').setDepth(9).setScale(0.8);
+  const esx = projX(wx,wy), esy = projY(wx,wy);
+  enemy.sprite = scene.add.sprite(esx, esy, 'hero').setOrigin(0.5, 0.89).setScale(1.9);
   enemy.sprite.setTint(Phaser.Display.Color.HexStringToColor(enemy.colorHex).color);
+  enemy.facingSector = 2;
+  enemy.sprite.play('idle_2');
+  enemy.sprite.setDepth(ENTITY_DEPTH_BASE + esy);
   enemy.sprite.setInteractive({ useHandCursor:true });
   enemy.sprite.on('pointerdown', () => tryEngageEnemy(enemy));
   STATE.enemies.push(enemy);
@@ -2044,9 +2374,23 @@ function updateEnemies(scene, dt){
       e.targetX = e.homeX+(Math.random()*2-1)*70;
       e.targetY = e.homeY+(Math.random()*2-1)*70;
     }
+    let walking = false;
     if (e.targetX!==undefined){
       const dx=e.targetX-e.x, dy=e.targetY-e.y, d=Math.hypot(dx,dy);
-      if (d>4){ e.x += dx/d*20*dt; e.y += dy/d*20*dt; if (e.sprite){ e.sprite.x=e.x; e.sprite.y=e.y; } }
+      if (d>4){
+        e.x += dx/d*20*dt; e.y += dy/d*20*dt;
+        walking = true;
+        // face along the on-screen direction of travel
+        const sdx = projX(dx,dy) - projX(0,0), sdy = projY(dx,dy) - projY(0,0);
+        e.facingSector = ((Math.round(Math.atan2(sdy,sdx)/(Math.PI/4))%8)+8)%8;
+      }
+    }
+    if (e.sprite){
+      const sx = projX(e.x,e.y), sy = projY(e.x,e.y);
+      e.sprite.x = sx; e.sprite.y = sy;
+      e.sprite.setDepth(ENTITY_DEPTH_BASE + sy);
+      const want = (walking?'walk_':'idle_')+e.facingSector;
+      if (!e.sprite.anims.currentAnim || e.sprite.anims.currentAnim.key !== want) e.sprite.play(want);
     }
   });
   STATE.enemies = STATE.enemies.filter(e => {
@@ -2497,10 +2841,11 @@ function bootGame(worldConfig, playerChoice){
       type: Phaser.AUTO,
       parent: 'game-host',
       backgroundColor: '#0a0d12',
-      pixelArt: true,
       scale: { mode: Phaser.Scale.RESIZE, autoCenter: Phaser.Scale.CENTER_BOTH, width: window.innerWidth, height: window.innerHeight },
       fps: { target: 60, min: 30 },
-      render: { antialias: false, roundPixels: true },
+      // smooth (non-pixel-art) rendering: the Kenney cubes are soft vector-style art and
+      // iso half-tile offsets are fractional, so antialiased subpixel positioning looks best
+      render: { antialias: true, roundPixels: false },
       scene: [BootScene, WorldScene],
     });
   } else {
@@ -2531,6 +2876,17 @@ window.__pr = {
   },
   regenerateZone: () => regenerateZone(),
   quickstart: () => { $('in-prompt').value=''; beginFromTitle(true); },
+  facing: () => STATE.facingSector,
+  currentAnim: () => (STATE.playerSpriteRef && STATE.playerSpriteRef.anims && STATE.playerSpriteRef.anims.currentAnim) ? STATE.playerSpriteRef.anims.currentAnim.key : null,
+  isoDebug: () => {
+    const chunk = STATE.chunkCache.get('0,0');
+    return {
+      orientation: chunk && chunk.isoMap ? chunk.isoMap.orientation : null,
+      hasIsoMap: !!(chunk && chunk.isoMap),
+      playerProj: { x: projX(STATE.player.x,STATE.player.y), y: projY(STATE.player.x,STATE.player.y) },
+      assetTextures: { isoTiles: STATE.scene ? STATE.scene.textures.exists('isoTiles') : false, hero: STATE.scene ? STATE.scene.textures.exists('hero') : false },
+    };
+  },
 };
 
 /* ==================================================================
