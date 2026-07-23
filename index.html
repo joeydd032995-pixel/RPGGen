@@ -379,6 +379,28 @@ select{ appearance:none; -webkit-appearance:none; background-image:linear-gradie
         </div>
       </div>
       <div class="card">
+        <div class="summary-field" style="margin-bottom:12px;">
+          <label>Scale</label>
+          <select id="sum-scale"></select>
+        </div>
+        <div class="summary-field" style="margin-bottom:12px;">
+          <label>Magic / tech level</label>
+          <select id="sum-magictech"></select>
+        </div>
+        <div class="summary-field" style="margin-bottom:12px;">
+          <label>Threat type</label>
+          <select id="sum-threat"></select>
+        </div>
+        <div class="summary-field" style="margin-bottom:12px;">
+          <label>Terrain</label>
+          <select id="sum-terrain"></select>
+        </div>
+        <div class="summary-field" style="margin-bottom:0;">
+          <label>Narrative structure</label>
+          <select id="sum-structure"></select>
+        </div>
+      </div>
+      <div class="card">
         <div class="summary-field" style="margin-bottom:10px;">
           <label>Seed</label>
           <div class="seed-row">
@@ -386,9 +408,13 @@ select{ appearance:none; -webkit-appearance:none; background-image:linear-gradie
             <button class="btn btn-ghost btn-sm" id="btn-reroll-seed">Reroll</button>
           </div>
         </div>
-        <div class="summary-field">
+        <div class="summary-field" style="margin-bottom:12px;">
           <label>Lore pillars</label>
           <ul class="lore-list" id="sum-lore"></ul>
+        </div>
+        <div class="summary-field">
+          <label>Factions</label>
+          <ul class="lore-list" id="sum-factions"></ul>
         </div>
       </div>
     </div>
@@ -981,18 +1007,25 @@ function selectInterviewQuestions(signals){
     return !signals[key];
   });
   const candidates = unresolved.length ? unresolved : pool;
-  candidates.sort((a,b) => (a.priority||2) - (b.priority||2));
+  // Group by axis first: several axes have two framings of the same question (a plain priority-1
+  // one and a deeper priority-3 one). Picking strictly by priority would make the deeper variant
+  // permanently unreachable, so instead pick ONE per axis, weighted toward the deeper framing the
+  // vaguer the prompt is -- this is what actually makes the "large branching pool" surface variety
+  // across sessions instead of always asking the same fixed 12 questions.
+  const byAxis = new Map();
+  candidates.forEach(q => { if (!byAxis.has(q.axis)) byAxis.set(q.axis, []); byAxis.get(q.axis).push(q); });
+  const varietyRng = new RNG(String(Math.random()));
+  const perAxisPick = [];
+  byAxis.forEach(list => {
+    list.sort((a,b) => (a.priority||2) - (b.priority||2));
+    if (list.length === 1){ perAxisPick.push(list[0]); return; }
+    const wantDeep = varietyRng.chance(clamp01(1 - signals.specificity));
+    perAxisPick.push(wantDeep ? list[list.length-1] : list[0]);
+  });
+  perAxisPick.sort((a,b) => (a.priority||2) - (b.priority||2));
   // fewer questions when prompt is already specific, more (up to the full pool) when vague or blank
   const targetCount = Math.round(lerp(6, 3, signals.specificity));
-  const seen = new Set();
-  const chosen = [];
-  for (const q of candidates){
-    if (chosen.length >= targetCount) break;
-    if (seen.has(q.axis)) continue;
-    seen.add(q.axis);
-    chosen.push(q);
-  }
-  return chosen;
+  return perAxisPick.slice(0, targetCount);
 }
 
 /* ==================================================================
@@ -1008,6 +1041,15 @@ const FACTION_ARCHETYPES = {
   post_apocalyptic: [['The Rust Union','scavengers who keep the old machines running'],['Ash Wardens','a militia defending the last farmland'],['The Salt Runners','traders who cross the wastes for anyone paying']],
 };
 
+// The interview question pool's option values (e.g. "single_zone", "forgiving", "gear_driven")
+// are written for player-facing clarity, not as raw internal enum keys -- these maps translate
+// them onto the vocab the rest of the engine (LAYOUTS/DIFFICULTIES/PROGRESSION_FOCI/EVENT_STYLES)
+// actually consumes, so an interview answer for these axes isn't silently dropped.
+const LAYOUT_ANSWER_MAP = { single_zone:'continent', settlement_cluster:'dungeon_overworld_hybrid', frontier_edge:'ruinscape', vertical_layers:'floating_realms' };
+const DIFFICULTY_ANSWER_MAP = { forgiving:'gentle', standard:'standard', punishing:'harsh', adaptive:'standard' };
+const PROGRESSION_ANSWER_MAP = { gear_driven:'combat', ability_driven:'combat', reputation_driven:'story', lore_driven:'story' };
+const EVENTSTYLE_ANSWER_MAP = { combat_forward:'chaotic', discovery_driven:'calm', social_encounters:'eventful', hazard_puzzle:'eventful' };
+
 function buildWorldConfig(signals, answers, seedOverride){
   const genre = signals.genre;
   const tone = answers.tone || signals.tone || 'mysterious';
@@ -1017,10 +1059,10 @@ function buildWorldConfig(signals, answers, seedOverride){
   const terrain = answers.terrain || signals.terrain || 'forest';
   const structure = answers.structure || signals.structure || 'sandbox';
   const pacing = signals.pacing || 'balanced';
-  const layout = answers.layout || defaultLayoutFor(structure, terrain);
-  const difficulty = answers.difficulty || 'standard';
-  const progressionFocus = answers.progression || 'balanced';
-  const eventStyle = answers.eventStyle || (pacing==='fast' ? 'chaotic' : (pacing==='slow' ? 'calm' : 'eventful'));
+  const layout = (answers.layout && LAYOUT_ANSWER_MAP[answers.layout]) || defaultLayoutFor(structure, terrain);
+  const difficulty = (answers.difficulty && DIFFICULTY_ANSWER_MAP[answers.difficulty]) || 'standard';
+  const progressionFocus = (answers.progression && PROGRESSION_ANSWER_MAP[answers.progression]) || 'balanced';
+  const eventStyle = (answers.eventStyle && EVENTSTYLE_ANSWER_MAP[answers.eventStyle]) || (pacing==='fast' ? 'chaotic' : (pacing==='slow' ? 'calm' : 'eventful'));
   const seed = seedOverride || String(Math.abs(hashToInt((answers.rawPrompt||'')+'|'+Date.now())) % 1000000000);
 
   const factionsPool = FACTION_ARCHETYPES[genre] || FACTION_ARCHETYPES.fantasy;
@@ -1215,35 +1257,56 @@ function fillSelect(sel, options, current){
     sel.appendChild(o);
   });
 }
+function labelize(s){ return String(s).split('_').map(w => w[0].toUpperCase()+w.slice(1)).join(' '); }
 function populateSummaryScreen(){
   const wc = currentWorldConfig;
   fillSelect($('sum-genre'), GENRES.map(g => [g, GENRE_LABELS[g]]), wc.genre);
-  fillSelect($('sum-tone'), Object.keys(PR_DATA.lexicon.toneKeywords).map(t => [t, t[0].toUpperCase()+t.slice(1)]), wc.tone);
+  fillSelect($('sum-tone'), Object.keys(PR_DATA.lexicon.toneKeywords).map(t => [t, labelize(t)]), wc.tone);
   fillSelect($('sum-layout'), LAYOUT_IDS.map(l => [l, LAYOUTS[l].name]), wc.layout);
-  fillSelect($('sum-difficulty'), DIFFICULTIES.map(d => [d, d[0].toUpperCase()+d.slice(1)]), wc.difficulty);
-  fillSelect($('sum-progression'), PROGRESSION_FOCI.map(p => [p, p[0].toUpperCase()+p.slice(1)]), wc.progressionFocus);
-  fillSelect($('sum-eventstyle'), EVENT_STYLES.map(e => [e, e[0].toUpperCase()+e.slice(1)]), wc.eventStyle);
+  fillSelect($('sum-difficulty'), DIFFICULTIES.map(d => [d, labelize(d)]), wc.difficulty);
+  fillSelect($('sum-progression'), PROGRESSION_FOCI.map(p => [p, labelize(p)]), wc.progressionFocus);
+  fillSelect($('sum-eventstyle'), EVENT_STYLES.map(e => [e, labelize(e)]), wc.eventStyle);
+  fillSelect($('sum-scale'), Object.keys(PR_DATA.lexicon.scaleKeywords).map(s => [s, labelize(s)]), wc.scale);
+  fillSelect($('sum-magictech'), Object.keys(PR_DATA.lexicon.magictechKeywords).map(m => [m, labelize(m)]), wc.magictech);
+  fillSelect($('sum-threat'), Object.keys(PR_DATA.lexicon.threatKeywords).map(t => [t, labelize(t)]), wc.threat);
+  fillSelect($('sum-terrain'), Object.keys(PR_DATA.lexicon.terrainKeywords).map(t => [t, labelize(t)]), wc.terrain);
+  fillSelect($('sum-structure'), Object.keys(PR_DATA.lexicon.structureKeywords).map(s => [s, labelize(s)]), wc.structure);
   $('sum-seed').value = wc.seed;
   const loreHost = $('sum-lore');
   loreHost.innerHTML = '';
   wc.lorePillars.forEach(p => { const li = document.createElement('li'); li.textContent = p; loreHost.appendChild(li); });
+  const factionHost = $('sum-factions');
+  factionHost.innerHTML = '';
+  wc.factions.forEach(f => { const li = document.createElement('li'); li.textContent = f.name+' — '+f.description; factionHost.appendChild(li); });
 }
 function readSummaryEdits(){
   const wc = currentWorldConfig;
   const newGenre = $('sum-genre').value;
+  const newTone = $('sum-tone').value;
+  const newThreat = $('sum-threat').value;
+  const newTerrain = $('sum-terrain').value;
   const genreChanged = newGenre !== wc.genre;
+  const loreInputsChanged = genreChanged || newTone!==wc.tone || newThreat!==wc.threat || newTerrain!==wc.terrain;
   wc.genre = newGenre;
-  wc.tone = $('sum-tone').value;
+  wc.tone = newTone;
   wc.layout = $('sum-layout').value;
   wc.difficulty = $('sum-difficulty').value;
   wc.progressionFocus = $('sum-progression').value;
   wc.eventStyle = $('sum-eventstyle').value;
+  wc.scale = $('sum-scale').value;
+  wc.magictech = $('sum-magictech').value;
+  wc.threat = newThreat;
+  wc.terrain = newTerrain;
+  wc.structure = $('sum-structure').value;
   wc.seed = $('sum-seed').value || wc.seed;
   wc.biomePalette = PR_DATA.biomes.filter(b=>b.genre===wc.genre).map(b=>b.id);
   if (genreChanged){
     const rng = childRNG(wc.seed, 'factions-re');
     const factionsPool = FACTION_ARCHETYPES[wc.genre] || FACTION_ARCHETYPES.fantasy;
     wc.factions = rng.shuffle(factionsPool).slice(0,2+(rng.chance(0.5)?1:0)).map(([name,desc])=>({name,description:desc,rep:0}));
+  }
+  if (loreInputsChanged){
+    const rng = childRNG(wc.seed, 'lore-re');
     wc.lorePillars = buildLorePillars(wc.genre, wc.tone, wc.threat, wc.terrain, rng);
   }
 }
@@ -1422,6 +1485,9 @@ function evictExcessChunks(){
     data.poiSprites.forEach(s => s.destroy());
     if (STATE.scene && STATE.scene.textures.exists('chk_'+key+'_'+STATE.worldConfig.zoneIndex)) STATE.scene.textures.remove('chk_'+key+'_'+STATE.worldConfig.zoneIndex);
     STATE.chunkCache.delete(key);
+    // Drop this chunk's POIs from the global list too -- otherwise STATE.pois grows unbounded
+    // over a long play session and every per-frame proximity/minimap scan slows down with it.
+    STATE.pois = STATE.pois.filter(p => !(p.cx===data.cx && p.cy===data.cy));
   });
 }
 
@@ -1677,7 +1743,7 @@ const ENGAGE_RANGE = 60;
 function generateNPCsAndQuests(isRegen){
   const wc = STATE.worldConfig;
   const rng = childRNG(wc.seed,'npcs',wc.zoneIndex);
-  const count = 6 + rng.int(0,3); // 6-8
+  const count = Math.min(MAX_NPCS, 6 + rng.int(0,3)); // 6-8, hard-capped at MAX_NPCS
   const spawnPOI = STATE.pois.find(p=>p.kind==='village') || STATE.pois[0];
   const npcs = [];
   for (let i=0;i<count;i++){
@@ -1704,6 +1770,7 @@ function generateNPCsAndQuests(isRegen){
       isWanderer: i >= count-2,
       wanderTimer: rng.range(0,3),
       questId:null, sprite:null, colorHex: colorDesc.glyphColorHex || '#e3ab4f',
+      linkedLorePillar: wc.lorePillars.length ? rng.pick(wc.lorePillars) : '',
     });
   }
   STATE.npcs = npcs;
@@ -1816,7 +1883,7 @@ function renderDialogueRoot(npc){
   else if (rep<=-3) text = npc.lowRep+' '+npc.greeting;
   $('dialogue-text').textContent = text;
   const choices = [];
-  choices.push({ label:'Tell me about this place.', action:() => { $('dialogue-text').textContent = npc.lore; renderDialogueChoicesOnly(npc); } });
+  choices.push({ label:'Tell me about this place.', action:() => { $('dialogue-text').textContent = npc.lore+(npc.linkedLorePillar?(' '+npc.linkedLorePillar):''); renderDialogueChoicesOnly(npc); } });
   choices.push({ label:'What drives you?', action:() => { $('dialogue-text').textContent = npc.motivation+' '+npc.backstory; renderDialogueChoicesOnly(npc); } });
   const quest = STATE.questLog.find(q => q.npcId===npc.id);
   if (quest){
