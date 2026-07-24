@@ -729,7 +729,7 @@ const PR_DATA = {
     { genre:'fantasy', id:'greenfield', name:'Green Fields', colorHex:'#3f7d3a', shadeHex:'#2c5a29', walkable:true, threat:0, heightMin:0.28, heightMax:0.6, moistureMin:0.3, moistureMax:1, heatMin:0.2, heatMax:0.8, description:'Rolling grass beneath an open sky.' },
     { genre:'fantasy', id:'stonepeak', name:'Stone Peaks', colorHex:'#7a7a7d', shadeHex:'#57575a', walkable:true, threat:2, heightMin:0.72, heightMax:1, moistureMin:0, moistureMax:1, heatMin:0, heatMax:1, description:'Windswept crags where little grows.' },
     { genre:'scifi', id:'void_gap', name:'Vacuum Breach', colorHex:'#0c122', shadeHex:'#080c16', walkable:false, threat:0, heightMin:0, heightMax:0.25, moistureMin:0, moistureMax:1, heatMin:0, heatMax:1, description:'A hull-open gap venting to hard vacuum.' },
-    { genre:'scifi', id:'hab_deck', name:'Habitation Deck', colorHex:'#3c6e8f', shadeHex:'#2a4f68', walkable:true, threat:0, heightMin:0.25, heightMax:0.6, moistureMin:0, moistureMax:1, heatMin:0, heatMax:1, description:'Recycled-air corridors humming with old machinery.' },
+    { genre:'scifi', id:'hab_deck', name:'Habitation Deck', colorHex:'#3c6e8f', shadeHex:'#2a4f68', walkable:true, threat:0, heightMin:0.25, heightMax:0.6, moistureMin:0.2, moistureMax:0.65, heatMin:0.25, heatMax:0.7, description:'Recycled-air corridors humming with old machinery.' },
     { genre:'scifi', id:'reactor_field', name:'Reactor Field', colorHex:'#8a6a2a', shadeHex:'#634c1e', walkable:true, threat:2, heightMin:0.72, heightMax:1, moistureMin:0, moistureMax:1, heatMin:0.5, heatMax:1, description:'Exposed conduits pulse with unstable energy.' },
     { genre:'horror', id:'black_bog', name:'Black Bog', colorHex:'#26301f', shadeHex:'#171e13', walkable:false, threat:1, heightMin:0, heightMax:0.28, moistureMin:0.4, moistureMax:1, heatMin:0, heatMax:1, description:'Water the color of old bruises.' },
     { genre:'horror', id:'gray_thicket', name:'Gray Thicket', colorHex:'#3d4238', shadeHex:'#292d26', walkable:true, threat:1, heightMin:0.28, heightMax:0.6, moistureMin:0, moistureMax:1, heatMin:0, heatMax:1, description:'Trees bent as if flinching from something unseen.' },
@@ -1493,7 +1493,7 @@ const STATE = {
   distanceAccum:0, nextEventAt:260,
   combat:null, dialogue:null,
   scene:null, game:null, spawnPoint:{x:0,y:0},
-  joyVector:{x:0,y:0}, dragVector:{x:0,y:0}, facingSector:2, keys:null,
+  joyVector:{x:0,y:0}, dragVector:{x:0,y:0}, facingSector:2, keys:null, suppressTap:false,
   minimapCtx:null, lastMinimapDraw:0,
   nearestInteractable:null,
 };
@@ -1744,12 +1744,13 @@ class WorldScene extends Phaser.Scene{
     this.input.on('pointerdown', (p) => {
       this.canvasDrag.active = true; this.canvasDrag.moved = false;
       this.canvasDrag.startX = p.x; this.canvasDrag.startY = p.y;
+      STATE.suppressTap = false; // a fresh press is a tap until it travels past the threshold
     });
     this.input.on('pointermove', (p) => {
       if (!this.canvasDrag.active || !p.isDown) return;
       const dx = p.x - this.canvasDrag.startX, dy = p.y - this.canvasDrag.startY;
       const d = Math.hypot(dx, dy);
-      if (!this.canvasDrag.moved && d > 12) this.canvasDrag.moved = true;
+      if (!this.canvasDrag.moved && d > 12){ this.canvasDrag.moved = true; STATE.suppressTap = true; }
       if (this.canvasDrag.moved && d > 0.001){
         const clamp60 = Math.min(1, d / 60);
         STATE.dragVector.x = (dx / d) * clamp60;
@@ -2157,7 +2158,11 @@ function renderNPCSprites(scene){
     s.play('idle_' + npc.facingSector);
     s.setDepth(ENTITY_DEPTH_BASE + sy);
     s.setInteractive({ useHandCursor:true });
-    s.on('pointerdown', () => {
+    // Fire on release, and only when the gesture was a tap — a canvas drag that happens
+    // to start on an NPC (common on mobile, where NPCs cluster around you) must move the
+    // player, not open dialogue.
+    s.on('pointerup', () => {
+      if (STATE.suppressTap) return;
       const d = Math.hypot(STATE.player.x-npc.x, STATE.player.y-npc.y);
       if (d > INTERACT_RANGE+24){ showToast('Get closer to talk.'); return; }
       openDialogueWithNPC(npc);
@@ -2363,7 +2368,7 @@ function spawnEnemiesForChunk(scene, chunkData){
   enemy.sprite.play('idle_2');
   enemy.sprite.setDepth(ENTITY_DEPTH_BASE + esy);
   enemy.sprite.setInteractive({ useHandCursor:true });
-  enemy.sprite.on('pointerdown', () => tryEngageEnemy(enemy));
+  enemy.sprite.on('pointerup', () => { if (STATE.suppressTap) return; tryEngageEnemy(enemy); });
   STATE.enemies.push(enemy);
 }
 function updateEnemies(scene, dt){
