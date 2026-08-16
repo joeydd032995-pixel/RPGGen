@@ -9,6 +9,9 @@ export default defineConfig({
         game:resolve(import.meta.dirname,'index.html'),
         softwareRenderer:resolve(import.meta.dirname,'software-renderer.html'),
       },
+      output:{
+        manualChunks(id){if(id.includes('/node_modules/three/'))return 'three';},
+      },
     },
   },
 });

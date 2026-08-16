@@ -19,6 +19,11 @@ It renders into an explicit RGBA byte buffer and only uses Canvas 2D to present 
 - A responsive primary-game presentation layer with portrait/landscape camera profiles, authored
   settlement dressing, cached articulated poses, and projected combat indicators.
 
+The CPU implementation is retained as the deterministic reference, test, and fallback subsystem.
+Primary gameplay now uses a Three.js/WebGL scene so production presentation can provide native
+resolution, PBR GLTF materials, soft shadow maps, ACES tone mapping, atmospheric fog, and a denser
+scene without weakening the CPU renderer's deterministic contracts.
+
 Open `software-renderer.html` through the Vite development server to inspect the three fill modes.
 The frame slider uses caller-supplied integer frames; it does not depend on wall-clock time.
 

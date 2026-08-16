@@ -1,186 +1,208 @@
-import {
-  DrawQueue,
-  applyLabelPose,
-  attachEquipment,
-  buildHslPalette,
-  clearSurface,
-  createSurface,
-  drawBar,
-  enqueueModel,
-  loadGlbModel,
-  packHsl,
-  presentSurface,
-  projectViewPoint,
-  renderCommands,
-  transformToView,
-} from './software-renderer/index.mjs';
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js';
 
-const WORLD_SCALE=.68,PLAYER_Z=138;
-const LIGHTING={ambient:72,intensity:55,direction:{x:-.48,y:.82,z:-.3}};
-const LEGACY_ASSET_URLS={hero:new URL('../assets/character.png',import.meta.url).href,isoTiles:new URL('../assets/iso-tiles.png',import.meta.url).href};
+const WORLD_SCALE=.55;
+const LEGACY_ASSET_URLS={
+  hero:new URL('../assets/character.png',import.meta.url).href,
+  isoTiles:new URL('../assets/iso-tiles.png',import.meta.url).href,
+};
 
-function emptyModel(){return{vertices:[],faces:[]};}
+const ASSET_URLS={
+  knight:new URL('../assets/models/kaykit-adventurers/knight-classic.glb',import.meta.url),
+  sword:new URL('../assets/models/kaykit-fantasy-weapons/sword-a.glb',import.meta.url),
+  mage:new URL('../assets/models/kaykit-adventurers/mage-classic.glb',import.meta.url),
+  rogue:new URL('../assets/models/kaykit-adventurers/rogue-classic.glb',import.meta.url),
+  barbarian:new URL('../assets/models/kaykit-adventurers/barbarian-classic.glb',import.meta.url),
+  tree:new URL('../assets/models/kenney-nature/tree_oak.glb',import.meta.url),
+  rock:new URL('../assets/models/kenney-nature/rock_largeC.glb',import.meta.url),
+  bush:new URL('../assets/models/kenney-nature/plant_bushDetailed.glb',import.meta.url),
+};
 
-function addBox(model,{x=0,y=0,z=0,width,height,depth,hsl,label='rigid'}){
-  const base=model.vertices.length,w=width/2,d=depth/2;
-  model.vertices.push(
-    {x:x-w,y,z:z-d,label},{x:x+w,y,z:z-d,label},{x:x+w,y:y+height,z:z-d,label},{x:x-w,y:y+height,z:z-d,label},
-    {x:x-w,y,z:z+d,label},{x:x+w,y,z:z+d,label},{x:x+w,y:y+height,z:z+d,label},{x:x-w,y:y+height,z:z+d,label},
-  );
-  [[0,2,1],[0,3,2],[5,6,4],[6,7,4],[4,3,0],[4,7,3],[1,2,5],[2,6,5],[3,7,2],[2,7,6],[4,0,5],[5,0,1]].forEach((face,index)=>model.faces.push({a:base+face[0],b:base+face[1],c:base+face[2],hsl:(hsl+(index%3-1)*2)&0xffff,mode:'flat',doubleSided:true}));
+function material(color,options={}){
+  return new THREE.MeshStandardMaterial({color,roughness:options.roughness??.72,metalness:options.metalness??.04,emissive:options.emissive??0,emissiveIntensity:options.emissiveIntensity??0});
 }
 
-function rgbHsl(hex,offset=0){
-  const value=parseInt(String(hex||'#637d43').replace('#',''),16),r=((value>>16)&255)/255,g=((value>>8)&255)/255,b=(value&255)/255,max=Math.max(r,g,b),min=Math.min(r,g,b),l=(max+min)/2,d=max-min;
-  let h=0,s=0;
-  if(d){s=d/(1-Math.abs(2*l-1));if(max===r)h=((g-b)/d)%6;else if(max===g)h=(b-r)/d+2;else h=(r-g)/d+4;h=(h*60+360)%360;}
-  return packHsl(Math.round(h/360*63),Math.round(s*7),Math.max(3,Math.min(124,Math.round(l*127)+offset)));
+function mesh(geometry,meshMaterial,castShadow=true){
+  const value=new THREE.Mesh(geometry,meshMaterial);
+  value.castShadow=castShadow;value.receiveShadow=true;
+  return value;
 }
 
-function makeVillager(color='#7d8951',variant=0){
-  const model=emptyModel(),cloth=rgbHsl(color,-8),clothDark=rgbHsl(color,-24),skin=packHsl(6,4,76),leather=packHsl(5,5,34),hair=packHsl((variant*5+3)%12,5,25+variant%3*5);
-  addBox(model,{x:-4.5,y:0,width:7,height:24,depth:8,hsl:clothDark,label:'leftLeg'});
-  addBox(model,{x:4.5,y:0,width:7,height:24,depth:8,hsl:clothDark,label:'rightLeg'});
-  addBox(model,{x:-4.5,y:0,z:-1,width:8,height:5,depth:12,hsl:leather,label:'leftLeg'});
-  addBox(model,{x:4.5,y:0,z:-1,width:8,height:5,depth:12,hsl:leather,label:'rightLeg'});
-  addBox(model,{y:23,width:22,height:28,depth:13,hsl:cloth,label:'torso'});
-  addBox(model,{y:51,width:15,height:16,depth:15,hsl:skin,label:'head'});
-  addBox(model,{y:63,z:1,width:16,height:5,depth:16,hsl:hair,label:'head'});
-  addBox(model,{x:-14.5,y:27,width:6,height:24,depth:7,hsl:skin,label:'leftArm'});
-  addBox(model,{x:14.5,y:27,width:6,height:24,depth:7,hsl:skin,label:'rightArm'});
-  if(variant%2)addBox(model,{y:35,z:8,width:18,height:16,depth:4,hsl:leather,label:'torso'});
-  return model;
+function addBox(group,size,position,meshMaterial){
+  const value=mesh(new THREE.BoxGeometry(...size),meshMaterial);
+  value.position.set(...position);group.add(value);return value;
+}
+
+function prepareTemplate(scene,targetHeight){
+  const root=scene;
+  root.traverse(child=>{
+    if(!child.isMesh)return;
+    child.castShadow=true;child.receiveShadow=true;
+    const source=Array.isArray(child.material)?child.material:[child.material];
+    const prepared=source.map(entry=>{
+      const value=entry.clone();
+      if(value.map){value.map.colorSpace=THREE.SRGBColorSpace;value.map.anisotropy=8;}
+      value.roughness=Math.max(.48,value.roughness??.72);value.metalness=Math.min(.18,value.metalness??0);
+      return value;
+    });
+    child.material=Array.isArray(child.material)?prepared:prepared[0];
+  });
+  const initial=new THREE.Box3().setFromObject(root),size=initial.getSize(new THREE.Vector3());
+  const scale=targetHeight/Math.max(.001,size.y);root.scale.setScalar(scale);root.updateMatrixWorld(true);
+  const bounds=new THREE.Box3().setFromObject(root),center=bounds.getCenter(new THREE.Vector3());
+  root.position.x-=center.x;root.position.z-=center.z;root.position.y-=bounds.min.y;
+  return root;
+}
+
+function cloneTemplate(template){
+  const root=cloneSkeleton(template);root.traverse(child=>{if(child.isMesh){child.castShadow=true;child.receiveShadow=true;}});return root;
+}
+
+function makeHouse(){
+  const group=new THREE.Group(),plaster=material(0xc8aa6e,{roughness:.92}),timber=material(0x4a2715,{roughness:.84}),roof=material(0x713019,{roughness:.8}),stone=material(0x77756d,{roughness:1}),glass=material(0xffc76a,{emissive:0xff8a24,emissiveIntensity:2.2,roughness:.25});
+  addBox(group,[34,23,29],[0,11.5,0],plaster);
+  const roofMesh=mesh(new THREE.ConeGeometry(27,18,4),roof);roofMesh.position.y=31;roofMesh.rotation.y=Math.PI/4;roofMesh.scale.z=.78;group.add(roofMesh);
+  addBox(group,[4,19,2.2],[0,9.5,15.4],timber);addBox(group,[31,3,2.2],[0,19,15.4],timber);
+  addBox(group,[3,22,2.2],[-14,11,15.4],timber);addBox(group,[3,22,2.2],[14,11,15.4],timber);
+  addBox(group,[8,14,2.5],[-7,7,15.6],material(0x382014,{roughness:.9}));
+  addBox(group,[5,5,2.6],[8,11,15.7],glass);
+  addBox(group,[6,16,6],[9,35,-6],stone);
+  const doorstep=addBox(group,[11,2,6],[-7,1,19],stone);doorstep.castShadow=false;
+  return group;
+}
+
+function makeFence(){
+  const group=new THREE.Group(),wood=material(0x6a4528,{roughness:.9});
+  addBox(group,[2.4,10,2.4],[-7,5,0],wood);addBox(group,[2.4,10,2.4],[7,5,0],wood);
+  addBox(group,[17,2,2],[0,6,0],wood);addBox(group,[17,2,2],[0,2.8,0],wood);return group;
 }
 
 function makeDragon(){
-  const model=emptyModel(),scale=packHsl(17,7,43),dark=packHsl(18,7,27),horn=packHsl(8,2,82),wing=packHsl(16,6,35);
-  addBox(model,{y:18,z:0,width:34,height:25,depth:54,hsl:scale});
-  addBox(model,{y:27,z:-38,width:25,height:19,depth:25,hsl:scale});
-  addBox(model,{x:-11,y:0,z:6,width:8,height:23,depth:11,hsl:dark});addBox(model,{x:11,y:0,z:6,width:8,height:23,depth:11,hsl:dark});
-  addBox(model,{x:-12,y:2,z:-24,width:7,height:20,depth:10,hsl:dark});addBox(model,{x:12,y:2,z:-24,width:7,height:20,depth:10,hsl:dark});
-  addBox(model,{y:23,z:39,width:16,height:13,depth:34,hsl:dark});addBox(model,{y:21,z:62,width:9,height:9,depth:25,hsl:dark});
-  const base=model.vertices.length;
-  model.vertices.push(
-    {x:-13,y:39,z:-5,label:'wing.l'},{x:-66,y:70,z:8,label:'wing.l'},{x:-48,y:31,z:36,label:'wing.l'},{x:-16,y:31,z:29,label:'wing.l'},
-    {x:13,y:39,z:-5,label:'wing.r'},{x:66,y:70,z:8,label:'wing.r'},{x:48,y:31,z:36,label:'wing.r'},{x:16,y:31,z:29,label:'wing.r'},
-  );
-  model.faces.push({a:base,b:base+1,c:base+2,hsl:wing,mode:'flat',doubleSided:true},{a:base,b:base+2,c:base+3,hsl:wing-3,mode:'flat',doubleSided:true},{a:base+4,b:base+6,c:base+5,hsl:wing,mode:'flat',doubleSided:true},{a:base+4,b:base+7,c:base+6,hsl:wing-3,mode:'flat',doubleSided:true});
-  addBox(model,{x:-7,y:43,z:-43,width:4,height:15,depth:4,hsl:horn});addBox(model,{x:7,y:43,z:-43,width:4,height:15,depth:4,hsl:horn});
-  return model;
+  const group=new THREE.Group(),scales=material(0x7d2623,{roughness:.58,metalness:.08}),belly=material(0xd28b42,{roughness:.72}),horn=material(0xe0d1aa,{roughness:.65}),wing=material(0x4e171a,{roughness:.68});
+  const body=mesh(new THREE.SphereGeometry(12,10,7),scales);body.scale.set(1,1.1,1.65);body.position.y=15;group.add(body);
+  const head=mesh(new THREE.SphereGeometry(8,9,7),scales);head.position.set(0,22,-20);group.add(head);
+  addBox(group,[9,8,7],[0,18,-26],belly);
+  for(const x of [-7,7]){const leg=mesh(new THREE.CylinderGeometry(2.5,3.2,13,7),scales);leg.position.set(x,6,x>0?5:-3);group.add(leg);const spike=mesh(new THREE.ConeGeometry(1.5,8,6),horn);spike.position.set(x,31,-21);spike.rotation.x=-.35;group.add(spike);}
+  const wingGeometry=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,23,0),new THREE.Vector3(-27,36,7),new THREE.Vector3(-20,17,14)]);wingGeometry.setIndex([0,1,2]);wingGeometry.computeVertexNormals();
+  const left=mesh(wingGeometry,wing);group.add(left);const right=left.clone();right.scale.x=-1;group.add(right);
+  const tail=mesh(new THREE.ConeGeometry(5,32,7),scales);tail.rotation.x=Math.PI/2;tail.position.set(0,14,25);group.add(tail);return group;
 }
 
-function makeShadow(){
-  const model=emptyModel(),segments=10;model.vertices.push({x:0,y:.35,z:0,label:'shadow'});
-  for(let i=0;i<segments;i++){const a=i/segments*Math.PI*2;model.vertices.push({x:Math.cos(a)*14,y:.35,z:Math.sin(a)*6,label:'shadow'});}
-  for(let i=0;i<segments;i++)model.faces.push({a:0,b:i+1,c:(i+1)%segments+1,hsl:packHsl(0,0,7),mode:'flat',alpha:95,doubleSided:true,priority:1});
-  return model;
+function makeQuestMarker(){
+  const group=new THREE.Group(),gold=material(0xffb829,{emissive:0xff8b00,emissiveIntensity:3,roughness:.3,metalness:.2});
+  const gem=mesh(new THREE.OctahedronGeometry(3.8,0),gold,false);gem.position.y=39;group.add(gem);
+  const ring=mesh(new THREE.TorusGeometry(5.5,.45,8,24),gold,false);ring.position.y=39;ring.rotation.x=Math.PI/2;group.add(ring);group.userData.gem=gem;group.userData.ring=ring;return group;
 }
 
-function makeMarker(){
-  const model=emptyModel(),gold=packHsl(8,6,78);model.vertices.push({x:0,y:22,z:0,label:'marker'},{x:-8,y:11,z:0,label:'marker'},{x:8,y:11,z:0,label:'marker'},{x:0,y:0,z:0,label:'marker'});
-  model.faces.push({a:0,b:1,c:2,hsl:gold,mode:'flat',doubleSided:true,priority:10},{a:1,b:3,c:2,hsl:gold,mode:'flat',doubleSided:true,priority:10});return model;
+function makeHealthBar(){
+  const group=new THREE.Group(),track=mesh(new THREE.PlaneGeometry(18,2.2),new THREE.MeshBasicMaterial({color:0x251313,depthTest:false}),false),fill=mesh(new THREE.PlaneGeometry(17,1.25),new THREE.MeshBasicMaterial({color:0xe84b3d,depthTest:false}),false);
+  track.renderOrder=20;fill.position.z=.05;fill.renderOrder=21;group.add(track,fill);group.userData.fill=fill;return group;
 }
 
-function makeHut(){
-  const model=emptyModel(),plaster=packHsl(8,3,70),timber=packHsl(5,6,31),roof=packHsl(3,6,38),door=packHsl(5,5,24);
-  addBox(model,{y:0,width:48,height:32,depth:42,hsl:plaster});addBox(model,{y:0,z:-21.5,width:13,height:23,depth:3,hsl:door});
-  addBox(model,{x:-20,y:0,z:-22,width:4,height:34,depth:3,hsl:timber});addBox(model,{x:20,y:0,z:-22,width:4,height:34,depth:3,hsl:timber});addBox(model,{y:29,z:-22,width:44,height:4,depth:3,hsl:timber});
-  const base=model.vertices.length,w=29,d=25,h=32,ridge=51;
-  model.vertices.push({x:-w,y:h,z:-d,label:'roof'},{x:w,y:h,z:-d,label:'roof'},{x:-w,y:h,z:d,label:'roof'},{x:w,y:h,z:d,label:'roof'},{x:0,y:ridge,z:-d,label:'roof'},{x:0,y:ridge,z:d,label:'roof'});
-  [[0,4,2],[4,5,2],[1,3,4],[4,3,5],[0,1,4],[2,5,3]].forEach((f,i)=>model.faces.push({a:base+f[0],b:base+f[1],c:base+f[2],hsl:roof-(i%2)*3,mode:'flat',doubleSided:true}));
-  return model;
+function skyTexture(){
+  const canvas=document.createElement('canvas');canvas.width=16;canvas.height=512;const context=canvas.getContext('2d'),gradient=context.createLinearGradient(0,0,0,512);
+  gradient.addColorStop(0,'#6fa7cf');gradient.addColorStop(.5,'#a9c6d4');gradient.addColorStop(1,'#d9c79d');context.fillStyle=gradient;context.fillRect(0,0,16,512);
+  const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;return texture;
 }
 
-function makeFence(){const model=emptyModel(),wood=packHsl(5,5,38);addBox(model,{x:-12,y:0,width:4,height:15,depth:4,hsl:wood});addBox(model,{x:12,y:0,width:4,height:15,depth:4,hsl:wood});addBox(model,{y:6,width:28,height:4,depth:3,hsl:wood});return model;}
+let terrainTextureCache;
+function terrainDetailTexture(){
+  if(terrainTextureCache)return terrainTextureCache;
+  const canvas=document.createElement('canvas');canvas.width=128;canvas.height=128;const context=canvas.getContext('2d');context.fillStyle='#c8c8c8';context.fillRect(0,0,128,128);
+  for(let index=0;index<1800;index++){const value=(index*1103515245+12345)>>>0,x=value&127,y=(value>>>8)&127,shade=174+(value>>>16)%64,size=1+(value>>>24)%2;context.fillStyle=`rgb(${shade},${shade},${shade})`;context.fillRect(x,y,size,size);}
+  terrainTextureCache=new THREE.CanvasTexture(canvas);terrainTextureCache.colorSpace=THREE.SRGBColorSpace;terrainTextureCache.wrapS=THREE.RepeatWrapping;terrainTextureCache.wrapT=THREE.RepeatWrapping;terrainTextureCache.anisotropy=8;return terrainTextureCache;
+}
 
 function buildTerrain(snapshot){
-  const model=emptyModel(),{columns,rows,cells}=snapshot.terrain,spacing=snapshot.terrain.spacing*WORLD_SCALE;
-  for(let row=0;row<rows;row++)for(let column=0;column<columns;column++){const sample=cells[row*columns+column];model.vertices.push({x:(column-(columns-1)/2)*spacing,y:sample.height,z:PLAYER_Z+(row-(rows-1)/2)*spacing,label:'terrain'});}
-  for(let row=0;row<rows-1;row++)for(let column=0;column<columns-1;column++){
-    const a=row*columns+column,b=a+1,c=a+columns,d=c+1,sample=cells[a],base=rgbHsl(sample.path?'#9b8255':sample.color,(row*3+column)%5-2);
-    if((row+column)&1)model.faces.push({a,b:c,c:b,hsl:base,mode:'flat',doubleSided:true},{a:b,b:c,c:d,hsl:base-2,mode:'flat',doubleSided:true});
-    else model.faces.push({a,b:d,c:b,hsl:base,mode:'flat',doubleSided:true},{a,b:c,c:d,hsl:base-2,mode:'flat',doubleSided:true});
+  const {columns,rows,cells}=snapshot.terrain,spacing=snapshot.terrain.spacing*WORLD_SCALE,positions=[],colors=[],uvs=[],indices=[];
+  const color=new THREE.Color();
+  for(let row=0;row<rows;row++)for(let column=0;column<columns;column++){
+    const sample=cells[row*columns+column],x=(column-(columns-1)/2)*spacing,z=-(row-(rows-1)/2)*spacing,y=sample.path?.04:0,base=positions.length/3;
+    positions.push(x-spacing/2,y,z-spacing/2,x+spacing/2,y,z-spacing/2,x+spacing/2,y,z+spacing/2,x-spacing/2,y,z+spacing/2);
+    uvs.push(column/3,row/3,(column+1)/3,row/3,(column+1)/3,(row+1)/3,column/3,(row+1)/3);
+    color.set(sample.path?'#a8874e':sample.color||'#506c42');color.offsetHSL(((row*13+column*7)%9-4)/800,0,((row*3+column*5)%7-3)/300);
+    for(let vertex=0;vertex<4;vertex++)colors.push(color.r,color.g,color.b);
+    if((row+column)&1)indices.push(base,base+3,base+1,base+1,base+3,base+2);else indices.push(base,base+2,base+1,base,base+3,base+2);
   }
-  return model;
+  const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));geometry.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));geometry.setAttribute('uv',new THREE.Float32BufferAttribute(uvs,2));geometry.setIndex(indices);geometry.computeVertexNormals();
+  const terrain=mesh(geometry,new THREE.MeshStandardMaterial({vertexColors:true,map:terrainDetailTexture(),roughness:.9,metalness:0}),false);terrain.receiveShadow=true;return terrain;
 }
 
-function preparePlayer(knight,sword){
-  const equipped=attachEquipment(knight,sword,{name:'sword_a',label:'hand.r',scale:.7,translate:{y:.22}});
-  const idle=applyLabelPose(equipped,{
-    'upperarm.r':{label:'upperarm.r',labels:['upperarm.r','lowerarm.r','hand.r'],rotateX:.18},
-    'upperarm.l':{label:'upperarm.l',labels:['upperarm.l','lowerarm.l','hand.l'],rotateX:-.16},
-  });
-  const walk=[];
-  for(let i=0;i<4;i++){const phase=i/4*Math.PI*2,swing=Math.sin(phase)*.45;walk.push(applyLabelPose(equipped,{
-    'upperarm.r':{label:'upperarm.r',labels:['upperarm.r','lowerarm.r','hand.r'],rotateX:swing},
-    'upperarm.l':{label:'upperarm.l',labels:['upperarm.l','lowerarm.l','hand.l'],rotateX:-swing},
-    'upperleg.r':{label:'upperleg.r',labels:['upperleg.r','lowerleg.r','foot.r','toes.r'],rotateX:-swing*.65},
-    'upperleg.l':{label:'upperleg.l',labels:['upperleg.l','lowerleg.l','foot.l','toes.l'],rotateX:swing*.65},
-  }));}
-  return{idle,walk};
-}
-
-function prepareNpc(model){
-  return applyLabelPose(model,{
-    'upperarm.r':{label:'upperarm.r',labels:['upperarm.r','lowerarm.r','hand.r'],rotateX:.14},
-    'upperarm.l':{label:'upperarm.l',labels:['upperarm.l','lowerarm.l','hand.l'],rotateX:-.14},
-  });
-}
+function removeChildren(group){while(group.children.length){const child=group.children.pop();child.parent=null;}}
 
 export class GameplayView{
   constructor(canvas){
-    this.canvas=canvas;this.context=canvas.getContext('2d',{alpha:false});this.palette=buildHslPalette(.88);this.lastRender=0;this.terrainKey='';this.terrain=null;this.people=new Map();
-    this.shadow=makeShadow();this.dragon=makeDragon();this.marker=makeMarker();this.hut=makeHut();this.fence=makeFence();this.ready=false;this.assets={};this.playerModels=null;this.npcModels=[];
-    this.resize();this.resizeObserver=new ResizeObserver(()=>this.resize());this.resizeObserver.observe(canvas);this.loadAssets();
+    this.canvas=canvas;this.ready=false;this.lastRender=0;this.lastFrameMs=0;this.terrainKey='';this.propsKey='';this.npcsKey='';this.enemiesKey='';this.loader=new GLTFLoader();
+    this.renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false,powerPreference:'high-performance'});
+    this.renderer.outputColorSpace=THREE.SRGBColorSpace;this.renderer.toneMapping=THREE.ACESFilmicToneMapping;this.renderer.toneMappingExposure=1;this.renderer.shadowMap.enabled=true;this.renderer.shadowMap.type=THREE.PCFSoftShadowMap;this.renderer.shadowMap.autoUpdate=false;this.shadowFrame=0;
+    this.scene=new THREE.Scene();this.scene.background=skyTexture();this.scene.fog=new THREE.FogExp2(0x9db6b5,.0022);
+    this.camera=new THREE.PerspectiveCamera(43,1,.1,1400);this.scene.add(this.camera);
+    const hemisphere=new THREE.HemisphereLight(0xc9e7ff,0x344125,1.55);this.scene.add(hemisphere);
+    this.sun=new THREE.DirectionalLight(0xffe1b0,3.25);this.sun.position.set(-130,190,110);this.sun.castShadow=true;this.sun.shadow.mapSize.set(2048,2048);this.sun.shadow.camera.left=-180;this.sun.shadow.camera.right=180;this.sun.shadow.camera.top=180;this.sun.shadow.camera.bottom=-180;this.sun.shadow.camera.near=20;this.sun.shadow.camera.far=500;this.sun.shadow.bias=-.0005;this.scene.add(this.sun,this.sun.target);
+    const rim=new THREE.DirectionalLight(0x7daeff,.72);rim.position.set(120,70,-180);this.scene.add(rim);
+    this.terrainGroup=new THREE.Group();this.buildingGroup=new THREE.Group();this.propGroup=new THREE.Group();this.npcGroup=new THREE.Group();this.enemyGroup=new THREE.Group();this.playerRoot=new THREE.Group();
+    this.scene.add(this.terrainGroup,this.buildingGroup,this.propGroup,this.npcGroup,this.enemyGroup,this.playerRoot);
+    this.resizeObserver=new ResizeObserver(()=>this.resize());this.resizeObserver.observe(canvas);this.resize();this.loadAssets();
   }
 
   resize(){
-    const rect=this.canvas.getBoundingClientRect(),portrait=rect.height>rect.width*1.2,width=portrait?288:384,height=portrait?Math.round(width*rect.height/Math.max(1,rect.width)):240;
-    if(this.canvas.width===width&&this.canvas.height===height)return;
-    this.canvas.width=width;this.canvas.height=height;this.surface=createSurface(width,height);this.terrainKey='';
+    const rect=this.canvas.getBoundingClientRect();if(rect.width<1||rect.height<1)return;
+    const portrait=rect.height>rect.width*1.2,pixelRatio=Math.min(devicePixelRatio||1,portrait?1.25:2);this.portrait=portrait;
+    this.renderer.setPixelRatio(pixelRatio);this.renderer.setSize(Math.round(rect.width),Math.round(rect.height),false);this.sun.shadow.mapSize.set(portrait?1024:2048,portrait?1024:2048);this.camera.aspect=rect.width/rect.height;this.camera.fov=portrait?48:40;this.camera.position.set(0,portrait?145:82,portrait?300:140);this.camera.lookAt(0,portrait?10:10,portrait?-35:-45);this.camera.updateProjectionMatrix();this.shadowFrame=0;
   }
 
   async loadAssets(){
     try{
-      const [knight,sword,mage,rogue,barbarian,tree,rock,bush]=await Promise.all([
-        loadGlbModel(new URL('../assets/models/kaykit-adventurers/knight-classic.glb',import.meta.url)),loadGlbModel(new URL('../assets/models/kaykit-fantasy-weapons/sword-a.glb',import.meta.url)),
-        loadGlbModel(new URL('../assets/models/kaykit-adventurers/mage-classic.glb',import.meta.url)),loadGlbModel(new URL('../assets/models/kaykit-adventurers/rogue-classic.glb',import.meta.url)),loadGlbModel(new URL('../assets/models/kaykit-adventurers/barbarian-classic.glb',import.meta.url)),
-        loadGlbModel(new URL('../assets/models/kenney-nature/tree_oak.glb',import.meta.url)),loadGlbModel(new URL('../assets/models/kenney-nature/rock_largeC.glb',import.meta.url)),loadGlbModel(new URL('../assets/models/kenney-nature/plant_bushDetailed.glb',import.meta.url)),
-      ]);
-      this.playerModels=preparePlayer(knight,sword);this.npcModels=[prepareNpc(mage),prepareNpc(rogue),prepareNpc(barbarian)];this.assets={tree,rock,bush};this.ready=true;document.documentElement.classList.add('software-world-ready');
-    }catch(error){console.error('Production low-poly assets failed to load',error);}
+      const entries=await Promise.all(Object.entries(ASSET_URLS).map(async([name,url])=>[name,(await this.loader.loadAsync(url.href)).scene]));this.assets=Object.fromEntries(entries);
+      this.templates={
+        knight:prepareTemplate(this.assets.knight,31),mage:prepareTemplate(this.assets.mage,29),rogue:prepareTemplate(this.assets.rogue,29),barbarian:prepareTemplate(this.assets.barbarian,30),
+        sword:prepareTemplate(this.assets.sword,13),tree:prepareTemplate(this.assets.tree,38),rock:prepareTemplate(this.assets.rock,10),bush:prepareTemplate(this.assets.bush,13),
+      };
+      this.playerRoot.add(cloneTemplate(this.templates.knight));const sword=cloneTemplate(this.templates.sword);sword.position.set(5.5,11,1);sword.rotation.set(0,0,-.42);this.playerRoot.add(sword);
+      this.houseTemplate=makeHouse();this.fenceTemplate=makeFence();this.dragonTemplate=makeDragon();this.markerTemplate=makeQuestMarker();
+      this.ready=true;document.documentElement.classList.add('software-world-ready','gpu-world-ready');
+    }catch(error){console.error('Production GPU assets failed to load',error);}
   }
 
-  wantsFrame(time=performance.now()){return this.ready&&time-this.lastRender>=66;}
+  wantsFrame(time=performance.now()){return this.ready&&time-this.lastRender>=33;}
 
-  camera(){
-    const portrait=this.surface.height>this.surface.width;
-    return{x:0,y:portrait?145:145,z:portrait?-235:-210,yaw:0,pitch:portrait?-.72:-.52,focalLength:this.surface.width*(portrait?1.55:.95),centerX:this.surface.width/2,centerY:this.surface.height*(portrait?.64:.68),near:12,far:1000};
+  worldPosition(entity,player,target){return target.set((entity.x-player.x)*WORLD_SCALE,entity.elevation||0,-(entity.y-player.y)*WORLD_SCALE);}
+
+  syncTerrain(snapshot){
+    if(snapshot.terrain.key===this.terrainKey)return;this.terrainKey=snapshot.terrain.key;removeChildren(this.terrainGroup);this.terrainGroup.add(buildTerrain(snapshot));this.shadowFrame=0;
+  }
+
+  syncBuildings(snapshot){
+    if(this.buildingGroup.children.length!==snapshot.buildings.length){removeChildren(this.buildingGroup);snapshot.buildings.forEach(()=>{const group=new THREE.Group();group.add(this.houseTemplate.clone(true));for(let index=-1;index<=1;index++){const fence=this.fenceTemplate.clone(true);fence.position.set(index*15,0,24);group.add(fence);}this.buildingGroup.add(group);});}
+    snapshot.buildings.forEach((building,index)=>{const group=this.buildingGroup.children[index];this.worldPosition(building,snapshot.player,group.position);group.rotation.y=-(building.rotationY||0);});
+  }
+
+  syncProps(snapshot){
+    const props=snapshot.props.slice(0,28),key=props.map(prop=>`${prop.kind}:${Math.round(prop.x)}:${Math.round(prop.y)}`).join('|');
+    if(key!==this.propsKey){this.propsKey=key;removeChildren(this.propGroup);for(const prop of props){const template=prop.kind==='rock'?this.templates.rock:prop.kind==='bush'?this.templates.bush:this.templates.tree;this.propGroup.add(cloneTemplate(template));}}
+    props.forEach((prop,index)=>{const root=this.propGroup.children[index];this.worldPosition(prop,snapshot.player,root.position);root.rotation.y=prop.rotation||0;});
+  }
+
+  syncNpcs(snapshot,time){
+    const npcs=snapshot.npcs.slice(0,8),key=npcs.map((npc,index)=>`${index}:${npc.color}:${npc.quest}`).join('|');
+    if(key!==this.npcsKey){this.npcsKey=key;removeChildren(this.npcGroup);npcs.forEach((npc,index)=>{const root=new THREE.Group(),templates=[this.templates.mage,this.templates.rogue,this.templates.barbarian];root.add(cloneTemplate(templates[index%templates.length]));if(npc.quest){const marker=this.markerTemplate.clone(true);marker.scale.setScalar(.68);root.add(marker);}this.npcGroup.add(root);});}
+    npcs.forEach((npc,index)=>{const root=this.npcGroup.children[index],dx=npc.x-snapshot.player.x,dy=npc.y-snapshot.player.y;root.visible=dy>-20&&!(Math.hypot(dx,dy)<55||(Math.abs(dx)<38&&Math.abs(dy)<120));this.worldPosition(npc,snapshot.player,root.position);root.rotation.y=-(npc.rotationY||0);root.position.y+=Math.sin(time*.002+index)*.12;const marker=root.children.find(child=>child.userData?.gem);if(marker){marker.rotation.y=time*.0025;marker.position.y=Math.sin(time*.004+index)*.8;}});
+  }
+
+  syncEnemies(snapshot,time){
+    const enemies=snapshot.enemies.slice(0,4),key=String(enemies.length);
+    if(key!==this.enemiesKey){this.enemiesKey=key;removeChildren(this.enemyGroup);enemies.forEach(()=>{const root=new THREE.Group(),dragon=this.dragonTemplate.clone(true),bar=makeHealthBar();bar.position.y=42;root.add(dragon,bar);this.enemyGroup.add(root);});}
+    enemies.forEach((enemy,index)=>{const root=this.enemyGroup.children[index],bar=root.children[1];this.worldPosition(enemy,snapshot.player,root.position);root.rotation.y=-(enemy.rotationY||0);root.position.y=Math.sin(time*.003+index)*.8;bar.quaternion.copy(this.camera.quaternion);bar.userData.fill.scale.x=Math.max(.001,enemy.hp/Math.max(1,enemy.maxHp));bar.userData.fill.position.x=-8.5*(1-bar.userData.fill.scale.x);});
   }
 
   render(snapshot,time=performance.now()){
-    if(!this.wantsFrame(time))return;this.lastRender=time;const frameStart=performance.now();
-    if(snapshot.terrain.key!==this.terrainKey){this.terrainKey=snapshot.terrain.key;this.terrain=buildTerrain(snapshot);}
-    clearSurface(this.surface,snapshot.sky||0x202b32);
-    const queue=new DrawQueue(),camera=this.camera(),options={camera,palette:this.palette,lighting:LIGHTING},enemyIndicators=[];
-    enqueueModel(queue,this.terrain,{...options,transform:{x:(snapshot.terrain.originX-snapshot.player.x)*WORLD_SCALE,z:(snapshot.terrain.originY-snapshot.player.y)*WORLD_SCALE}});
-
-    const coordinates=(entity)=>({x:(entity.x-snapshot.player.x)*WORLD_SCALE,z:PLAYER_Z+(entity.y-snapshot.player.y)*WORLD_SCALE});
-    const visible=({x,z})=>Math.abs(x)<260&&z>-210&&z<390;
-    const place=(model,entity,scale=1,shadowScale=1)=>{const point=coordinates(entity);if(!visible(point))return null;if(shadowScale)enqueueModel(queue,this.shadow,{...options,transform:{...point,y:.15,scale:shadowScale}});enqueueModel(queue,model,{...options,transform:{...point,y:entity.elevation||1,scale,rotationY:entity.rotationY||0}});return point;};
-
-    for(const building of snapshot.buildings){place(this.hut,building,1.15,0);for(let i=-1;i<=1;i++)place(this.fence,{x:building.x+i*29,y:building.y+38,rotationY:building.rotationY},1.05,0);}
-    for(const prop of snapshot.props.slice(0,24)){const point=coordinates(prop);if(!visible(point))continue;const model=prop.kind==='rock'?this.assets.rock:prop.kind==='bush'?this.assets.bush:this.assets.tree,scale=prop.kind==='tree'?22:prop.kind==='rock'?10:14;enqueueModel(queue,model,{...options,transform:{...point,y:0,scale,rotationY:prop.rotation}});}
-
-    snapshot.npcs.slice(0,8).forEach((npc,index)=>{const dx=npc.x-snapshot.player.x,dy=npc.y-snapshot.player.y;if(Math.hypot(dx,dy)<28||(Math.abs(dx)<38&&dy>0&&dy<115))return;let model,scale,shadowScale;if(index<this.npcModels.length){model=this.npcModels[index];scale=17;shadowScale=.9;}else{const key=npc.color+'|'+index%4;model=this.people.get(key);if(!model){model=makeVillager(npc.color,index%4);this.people.set(key,model);}scale=.54;shadowScale=.72;}place(model,npc,scale,shadowScale);if(npc.quest)place(this.marker,{...npc,elevation:46},.5,0);});
-    snapshot.enemies.slice(0,4).forEach(enemy=>{const point=place(this.dragon,enemy,.62,1.65);if(point)enemyIndicators.push({...point,hp:enemy.hp,maxHp:enemy.maxHp});});
-    const playerModel=snapshot.player.moving?this.playerModels.walk[Math.floor(time/110)%this.playerModels.walk.length]:this.playerModels.idle;
-    place(playerModel,{...snapshot.player,rotationY:(snapshot.player.facing||0)*Math.PI/4+Math.PI},this.surface.height>this.surface.width?22:19,1);
-    renderCommands(this.surface,queue,this.palette);
-
-    for(const enemy of enemyIndicators){const view=transformToView({x:enemy.x,y:68,z:enemy.z},camera);if(view.z<=camera.near)continue;const screen=projectViewPoint(view,camera);drawBar(this.surface,Math.round(screen.x-14),Math.round(screen.y),28,enemy.hp,enemy.maxHp,{track:0x241916,fill:0xd94b3d,border:0xe7d8ad});}
-    presentSurface(this.context,this.surface);this.lastFrameMs=performance.now()-frameStart;
+    if(!this.wantsFrame(time))return;this.lastRender=time;const started=performance.now();this.syncTerrain(snapshot);this.syncBuildings(snapshot);this.syncProps(snapshot);this.syncNpcs(snapshot,time);this.syncEnemies(snapshot,time);
+    const playerScale=this.portrait?1.45:1;this.playerRoot.scale.setScalar(playerScale);this.playerRoot.position.set(0,snapshot.player.moving?Math.abs(Math.sin(time*.012))*.65:Math.sin(time*.002)*.12,0);this.playerRoot.rotation.y=-(snapshot.player.facing||0)*Math.PI/4+Math.PI;
+    this.sun.target.position.set(0,0,-40);this.shadowFrame+=1;this.renderer.shadowMap.needsUpdate=this.shadowFrame%60===1;this.renderer.render(this.scene,this.camera);this.lastFrameMs=performance.now()-started;
   }
 }
 
-if(typeof window!=='undefined'){window.__promptRealmAssetUrls=LEGACY_ASSET_URLS;const canvas=document.querySelector('#software-game-view');if(canvas)window.__promptRealmSoftwareView=new GameplayView(canvas);}
+if(typeof window!=='undefined'){
+  window.__promptRealmAssetUrls=LEGACY_ASSET_URLS;const canvas=document.querySelector('#software-game-view');if(canvas)window.__promptRealmSoftwareView=new GameplayView(canvas);
+}
