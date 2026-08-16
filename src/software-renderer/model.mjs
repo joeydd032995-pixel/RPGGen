@@ -35,13 +35,15 @@ function rotate(vertex,options){
 export function attachEquipment(base,equipment,options={}){
   const vertexOffset=base.vertices.length,materialOffset=base.materials?.length||0;
   const labelPivots=base.labelPivots||computeLabelPivots(base);
+  const partName=options.name||'equipment',textureName=(name)=>`${partName}:${name}`;
   const result={
     ...base,
     vertices:base.vertices.map(vertex=>({...vertex})).concat(equipment.vertices.map(vertex=>rotate(vertex,options))),
-    faces:base.faces.map(face=>({...face})).concat(equipment.faces.map(face=>({...face,a:face.a+vertexOffset,b:face.b+vertexOffset,c:face.c+vertexOffset,material:face.material===undefined?undefined:face.material+materialOffset}))),
-    materials:(base.materials||[]).concat(equipment.materials||[]),
+    faces:base.faces.map(face=>({...face})).concat(equipment.faces.map(face=>({...face,a:face.a+vertexOffset,b:face.b+vertexOffset,c:face.c+vertexOffset,material:face.material===undefined?undefined:face.material+materialOffset,texture:face.texture?textureName(face.texture):face.texture}))),
+    materials:(base.materials||[]).concat((equipment.materials||[]).map(material=>({...material,texture:material.texture?textureName(material.texture):material.texture}))),
+    textures:{...(base.textures||{}),...Object.fromEntries(Object.entries(equipment.textures||{}).map(([name,texture])=>[textureName(name),texture]))},
     labelPivots,
-    parts:[...(base.parts||[]),{name:options.name||'equipment',label:options.label||'rigid',vertexStart:vertexOffset,vertexCount:equipment.vertices.length}],
+    parts:[...(base.parts||[]),{name:partName,label:options.label||'rigid',vertexStart:vertexOffset,vertexCount:equipment.vertices.length}],
   };
   validateModelBudget(result,options.budget||CLASSIC_MODEL_BUDGET);
   return result;

@@ -139,6 +139,9 @@ select{ appearance:none; -webkit-appearance:none; background-image:linear-gradie
 #screen-game{ background:#000; }
 #game-host{ position:absolute; inset:0; width:100%; height:100%; }
 #game-host canvas{ display:block; width:100%; height:100%; }
+#software-game-view{ position:absolute; inset:0; z-index:2; width:100%; height:100%; image-rendering:auto; pointer-events:none; opacity:0; transition:opacity .25s; }
+.software-world-ready #software-game-view{ opacity:1; }
+.software-world-ready #game-host canvas{ opacity:0; }
 
 #hud{
   position:absolute; top:calc(10px + var(--safe-t)); left:10px; right:10px; z-index:20;
@@ -157,8 +160,19 @@ select{ appearance:none; -webkit-appearance:none; background-image:linear-gradie
 .bar.energy .fill{ background:linear-gradient(90deg,var(--accent-3),#c3aef2); }
 #hud-gold{ font-size:.74rem; color:var(--warn); font-weight:700; margin-top:6px; }
 
+#screen-game #hud-main{
+  max-width:210px; padding:9px 12px 10px; border:2px solid #796744; border-radius:5px;
+  background:linear-gradient(180deg,rgba(49,45,37,.96),rgba(25,25,22,.96));
+  box-shadow:inset 0 0 0 1px #b79b63,0 3px 12px rgba(0,0,0,.55); font-family:Georgia,"Times New Roman",serif;
+}
+#screen-game #hud-name{ color:#f2dfae; letter-spacing:.02em; text-shadow:1px 1px #000; }
+#screen-game #hud-lvl{ color:#e3bd62; }
+#screen-game .bar{ height:8px; border-radius:1px; border:1px solid #0e0d0b; background:#171815; box-shadow:inset 0 1px 2px #000; }
+#screen-game #hud-gold{ color:#e3c76f; text-shadow:1px 1px #000; }
+
 #minimap-wrap{ pointer-events:auto; flex:0 0 auto; }
 #minimap-canvas{ width:112px; height:112px; border-radius:var(--radius-sm); border:1px solid var(--border-soft); background:var(--bg-1); display:block; }
+#screen-game #minimap-canvas{ width:104px; height:104px; border-radius:50%; border:5px double #ad9765; box-shadow:0 3px 14px #000,inset 0 0 0 2px #29271f; }
 
 #interact-prompt{
   position:absolute; left:50%; bottom:calc(128px + var(--safe-b)); transform:translateX(-50%);
@@ -166,6 +180,7 @@ select{ appearance:none; -webkit-appearance:none; background-image:linear-gradie
   font-size:.85rem; font-weight:700; z-index:21; pointer-events:none; display:none; white-space:nowrap;
 }
 #interact-prompt.show{ display:block; }
+#screen-game #interact-prompt{ bottom:calc(82px + var(--safe-b)); border:2px solid #9b8253; border-radius:4px; background:linear-gradient(#40392b,#211f1a); color:#f0dfb7; box-shadow:inset 0 0 0 1px #cfb678,0 3px 12px #000; font-family:Georgia,"Times New Roman",serif; }
 
 #joystick-zone{ position:absolute; left:0; bottom:0; width:46%; height:46%; z-index:15; touch-action:none; }
 #joystick-base{
@@ -179,6 +194,7 @@ select{ appearance:none; -webkit-appearance:none; background-image:linear-gradie
   background:linear-gradient(0deg,rgba(10,13,18,.92),rgba(10,13,18,.55) 80%,transparent);
   pointer-events:none; /* the gradient strip must not eat world touches; only the buttons are interactive */
 }
+#screen-game #action-bar{ justify-content:center; gap:5px; padding:7px 7px calc(7px + var(--safe-b)); background:linear-gradient(0deg,rgba(11,12,10,.98),rgba(24,25,21,.9) 72%,transparent); }
 .ab-btn{
   flex:1 1 0; min-height:var(--tap); border-radius:14px; border:1px solid var(--border-soft); background:var(--panel);
   color:var(--text); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; cursor:pointer; position:relative;
@@ -189,6 +205,17 @@ select{ appearance:none; -webkit-appearance:none; background-image:linear-gradie
 .ab-btn .badge{ position:absolute; top:2px; right:14px; background:var(--danger); color:#fff; font-size:.6rem; font-weight:800; border-radius:999px; min-width:15px; height:15px; display:flex; align-items:center; justify-content:center; padding:0 3px; }
 .ab-btn.primary{ background:linear-gradient(180deg,var(--accent),#c9862e); border-color:#c9862e; }
 .ab-btn.primary .lb,.ab-btn.primary .ic{ color:#241505; }
+#screen-game .ab-btn{ flex:0 1 78px; min-height:58px; max-width:82px; border-radius:6px; border:2px solid #4f4938; background:linear-gradient(#38372f,#181a18); box-shadow:inset 0 0 0 1px #756b50,0 2px 4px #000; }
+#screen-game .ab-btn .ic{ filter:saturate(.75); }
+#screen-game .ab-btn .lb{ color:#c6bea9; font-family:Georgia,"Times New Roman",serif; font-size:.56rem; }
+#screen-game .ab-btn.primary{ border-color:#a27a32; background:linear-gradient(#d2a958,#866125); box-shadow:inset 0 0 0 1px #efd18b,0 2px 5px #000; }
+@media(max-width:540px){
+  #hud{ top:calc(6px + var(--safe-t)); left:6px; right:6px; gap:6px; }
+  #screen-game #hud-main{ max-width:176px; padding:7px 9px; }
+  #screen-game #minimap-canvas{ width:88px; height:88px; }
+  #screen-game .ab-btn{ min-width:0; flex:1 1 0; min-height:55px; }
+  #screen-game .ab-btn .lb{ font-size:.48rem; letter-spacing:0; }
+}
 
 /* ---------- SHEETS / PANELS ---------- */
 .sheet-backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.5); z-index:29; opacity:0; pointer-events:none; transition:opacity .2s; }
@@ -452,6 +479,7 @@ select{ appearance:none; -webkit-appearance:none; background-image:linear-gradie
   <!-- ===================== GAME SCREEN ===================== -->
   <div id="screen-game" class="screen hidden">
     <div id="game-host"></div>
+    <canvas id="software-game-view" width="256" height="384" aria-label="Textured low-poly game world"></canvas>
 
     <div id="hud">
       <div id="hud-main">
@@ -572,6 +600,7 @@ select{ appearance:none; -webkit-appearance:none; background-image:linear-gradie
   </div>
 
 </div>
+<script type="module" src="./src/gameplay-view.mjs"></script>
 <script src="https://cdn.jsdelivr.net/npm/phaser@3.85.2/dist/phaser.min.js" onerror="document.getElementById('boot-error').classList.add('open')"></script>
 <script>
 /* PromptRealm MMORPG Generator — main script (systems appended below in order). */
@@ -1671,6 +1700,40 @@ function biomeAt(wtx, wty){
   const lx = ((wtx%CHUNK_SIZE)+CHUNK_SIZE)%CHUNK_SIZE, ly = ((wty%CHUNK_SIZE)+CHUNK_SIZE)%CHUNK_SIZE;
   return chunk.biomeGrid[ly*CHUNK_SIZE+lx];
 }
+function buildSoftwareWorldSnapshot(){
+  const columns=25,rows=27,halfX=Math.floor(columns/2),halfY=Math.floor(rows/2);
+  const centerTileX=Math.floor(STATE.player.x/TILE),centerTileY=Math.floor(STATE.player.y/TILE),spawnTileX=Math.floor(STATE.spawnPoint.x/TILE),spawnTileY=Math.floor(STATE.spawnPoint.y/TILE),cells=[];
+  for(let row=0;row<rows;row++)for(let column=0;column<columns;column++){
+    const tileX=centerTileX+column-halfX,tileY=centerTileY+row-halfY,biome=biomeAt(tileX,tileY),spawnDX=tileX-spawnTileX,spawnDY=tileY-spawnTileY;
+    const clearing=Math.max(Math.abs(spawnDX),Math.abs(spawnDY))<9;
+    const path=clearing&&(Math.abs(spawnDX)<=1||Math.abs(spawnDY)<=1);
+    cells.push({color:clearing?'#496f36':biome?biome.colorHex:'#30383b',path,height:path?0:clearing?(hashLattice(tileX,tileY,STATE.layoutSalt+991)*3-1.5):biome&&biome.walkable?(hashLattice(tileX,tileY,STATE.layoutSalt+991)*7-3.5):-10});
+  }
+  const village=STATE.pois.find(poi=>poi.kind==='village'),props=[];
+  STATE.chunkCache.forEach(chunk=>(chunk.props||[]).forEach((prop,index)=>{
+    const x=(chunk.cx*CHUNK_SIZE+prop.localX)*TILE+TILE/2,y=(chunk.cy*CHUNK_SIZE+prop.localY)*TILE+TILE/2,distance=Math.hypot(x-STATE.player.x,y-STATE.player.y);
+    if(distance>340||(village&&Math.hypot(x-village.worldX,y-village.worldY)<105))return;
+    const kind=prop.texture==='prop_rock'||prop.texture==='prop_shard'?'rock':index%3===0?'tree':'bush';
+    props.push({x,y,distance,kind,rotation:hashLattice(chunk.cx*37+index,chunk.cy*41-index,STATE.layoutSalt)*Math.PI*2});
+  }));
+  if(village)for(let index=0;index<12;index++){
+    const angle=index/12*Math.PI*2+.18,radius=205+(index%3)*18;
+    props.push({x:village.worldX+Math.cos(angle)*radius,y:village.worldY+Math.sin(angle)*radius,distance:radius,kind:index%4===0?'rock':'tree',rotation:angle*.7});
+  }
+  props.sort((a,b)=>a.distance-b.distance);
+  const buildings=village?[
+    {x:village.worldX-104,y:village.worldY+70,rotationY:.12},{x:village.worldX+104,y:village.worldY+72,rotationY:-.12},
+    {x:village.worldX-112,y:village.worldY+150,rotationY:.08},{x:village.worldX+112,y:village.worldY+154,rotationY:-.08},
+  ]:[];
+  const sky={fantasy:0x26343a,scifi:0x172634,horror:0x1c1b25,post_apocalyptic:0x352721}[STATE.worldConfig.genre]||0x26343a;
+  return{
+    sky,player:{x:STATE.player.x,y:STATE.player.y,facing:STATE.facingSector,moving:!!STATE.playerMoving},
+    terrain:{columns,rows,spacing:TILE,originX:(centerTileX+.5)*TILE,originY:(centerTileY+.5)*TILE,key:STATE.worldConfig.zoneIndex+'|'+centerTileX+'|'+centerTileY,cells},
+    buildings,props,
+    npcs:STATE.npcs.map(npc=>({x:npc.x,y:npc.y,color:npc.colorHex,quest:!!npc.questId,rotationY:(npc.facingSector||0)*Math.PI/4})),
+    enemies:STATE.enemies.map(enemy=>({x:enemy.x,y:enemy.y,hp:enemy.hp,maxHp:enemy.maxHp,rotationY:hashToInt(enemy.id)%628/100})),
+  };
+}
 function walkableAtPixel(px, py){
   const wtx = Math.floor(px/TILE), wty = Math.floor(py/TILE);
   const b = biomeAt(wtx,wty);
@@ -1799,8 +1862,9 @@ class BootScene extends Phaser.Scene{
   preload(){
     this.assetFailed = false;
     this.load.on('loaderror', () => { this.assetFailed = true; });
-    this.load.image('isoTiles', 'assets/iso-tiles.png');
-    this.load.spritesheet('hero', 'assets/character.png', { frameWidth: 64, frameHeight: 128 });
+    const assetUrls=window.__promptRealmAssetUrls||{};
+    this.load.image('isoTiles', assetUrls.isoTiles||'assets/iso-tiles.png');
+    this.load.spritesheet('hero', assetUrls.hero||'assets/character.png', { frameWidth: 64, frameHeight: 128 });
   }
   create(){
     const g = this.add.graphics();
@@ -1982,6 +2046,7 @@ class WorldScene extends Phaser.Scene{
 
     const speed = 168;
     const moving = mag > 0.05;
+    STATE.playerMoving = moving;
     if (moving){
       // screen intent -> isometric world direction, so a drag toward an iso diagonal
       // walks exactly along that diagonal
@@ -2010,6 +2075,8 @@ class WorldScene extends Phaser.Scene{
     updateInteractProximity();
     updateAtmosphere(this);
     redrawMinimap(false);
+    const softwareView=window.__promptRealmSoftwareView;
+    if(softwareView&&softwareView.wantsFrame(time))softwareView.render(buildSoftwareWorldSnapshot(),time);
   }
 }
 function updateAtmosphere(scene){
@@ -2273,7 +2340,7 @@ function generateNPCsAndQuests(isRegen){
     let baseX = anchorX, baseY = anchorY;
     for (let attempt = 0; attempt < 14; attempt++){
       const angle = rng.range(0, Math.PI*2);
-      const rad = rng.range(24, 120) * (1 - attempt/16);
+      const rad = rng.range(70, 180) * (1 - attempt/20);
       const cx = anchorX + Math.cos(angle)*rad, cy = anchorY + Math.sin(angle)*rad;
       if (walkableAtPixel(cx, cy)){ baseX = cx; baseY = cy; break; }
     }

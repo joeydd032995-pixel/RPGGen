@@ -50,6 +50,11 @@ contract and the remaining work required before claiming parity with a specific 
 Selected CC0 Kenney scenery is loaded through the renderer's GLB converter; the approved character,
 equipment, and interface sourcing plan is recorded in `docs/asset-sourcing.md`.
 
+The main gameplay screen uses a responsive software-rendered presentation layer driven by live
+Phaser world state. It renders embedded GLTF texture atlases, a rig-labeled player with cached walk
+poses, authored village roads and buildings, streamed scenery, villagers, monsters, shadows, quest
+markers, and projected health bars while Phaser retains movement, collision, and input.
+
 ## Controls
 
 - **Keyboard:** WASD / arrow keys to move.
