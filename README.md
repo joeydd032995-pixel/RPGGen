@@ -41,6 +41,15 @@ faction allegiance changes reputation with rival powers, and dangerous landmarks
 encounters. Procedural biome props, climate tinting, temporary weather, keyboard-safe dialogs, and
 reduced-motion support provide a richer presentation without requiring additional downloads.
 
+## Software renderer prototype
+
+`software-renderer.html` is a standalone clean-room CPU rasterizer demo with flat, packed-HSL
+Gouraud, and pre-shaded 128x128 textured triangle paths. It also includes deterministic framebuffer
+hashes and priority/depth-bucket ordering. See `docs/software-renderer.md` for the implemented pixel
+contract and the remaining work required before claiming parity with a specific classic client.
+Selected CC0 Kenney scenery is loaded through the renderer's GLB converter; the approved character,
+equipment, and interface sourcing plan is recorded in `docs/asset-sourcing.md`.
+
 ## Controls
 
 - **Keyboard:** WASD / arrow keys to move.

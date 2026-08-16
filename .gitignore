@@ -1,2 +1,11 @@
 node_modules/
 dist/
+.tools/
+.venv-itch-dl/
+*.log
+renderer-preview.ppm
+renderer-preview.png
+assets/external/**/source/
+assets/external/**/source.zip
+assets/incoming/
+.env
