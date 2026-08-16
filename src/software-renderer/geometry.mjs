@@ -107,17 +107,18 @@ export function enqueueModel(queue,model,options) {
     const indices=[face.a,face.b,face.c];
     const packedHsl=face.hsl??0;
     const hueSaturation=packedHsl>>7;
+    const shadeLight=(raw)=>mode==='textured'?raw:clampInt(Math.round((packedHsl&127)*raw/127),2,126);
     if(!face.texturePlane&&indices.every(vertexIndex=>viewVertices[vertexIndex].z>=camera.near&&viewVertices[vertexIndex].z<=camera.far)){
       const projected=indices.map(vertexIndex=>{
-        const view=viewVertices[vertexIndex];
-        return{...projectViewPoint(view,camera),light:mode==='gouraud'?vertexLights[vertexIndex]:faceLights[faceIndex],u:0,v:0,q:1/view.z};
+        const view=viewVertices[vertexIndex],uv=model.vertices[vertexIndex].uv;
+        return{...projectViewPoint(view,camera),light:shadeLight(mode==='gouraud'?vertexLights[vertexIndex]:faceLights[faceIndex]),u:uv?uv[0]*127:0,v:uv?(1-uv[1])*127:0,q:1/view.z};
       });
       const area=projectedArea(...projected);
       if(area===0||(!face.doubleSided&&area>=0))return;
       const command={mode,vertices:projected,depth:Math.round(indices.reduce((sum,index)=>sum+viewVertices[index].z,0)/3),priority:face.priority??0,alpha:face.alpha??255};
       if(mode==='flat')command.color=palette[(hueSaturation<<7)|projected[0].light];
       else if(mode==='gouraud')command.hueSaturation=hueSaturation;
-      else {command.texture=options.textures?.[face.texture];if(!command.texture)return;}
+      else {command.texture=options.textures?.[face.texture]||model.textures?.[face.texture];if(!command.texture)return;}
       queue.add(command);facesQueued+=1;return;
     }
     let mapping=null;
@@ -126,10 +127,11 @@ export function enqueueModel(queue,model,options) {
       mapping=createTexturePlane(origin,uPoint,vPoint);
     }
     const polygon=indices.map(vertexIndex=>{
-      const mapped=mapping?mapPointToTexturePlane(worldVertices[vertexIndex],mapping,127):{u:0,v:0};
+      const uv=model.vertices[vertexIndex].uv;
+      const mapped=mapping?mapPointToTexturePlane(worldVertices[vertexIndex],mapping,127):uv?{u:uv[0]*127,v:(1-uv[1])*127}:{u:0,v:0};
       return {
         view:viewVertices[vertexIndex],u:mapped.u,v:mapped.v,
-        light:mode==='gouraud'?vertexLights[vertexIndex]:faceLights[faceIndex],
+        light:shadeLight(mode==='gouraud'?vertexLights[vertexIndex]:faceLights[faceIndex]),
       };
     });
     const clipped=clipDepth(clipDepth(polygon,camera.near,true),camera.far,false);
@@ -143,7 +145,7 @@ export function enqueueModel(queue,model,options) {
       const command={mode,vertices:projected,depth,priority:face.priority??0,alpha:face.alpha??255};
       if(command.mode==='flat')command.color=palette[(hueSaturation<<7)|triangle[0].light];
       else if(command.mode==='gouraud')command.hueSaturation=hueSaturation;
-      else {command.texture=options.textures?.[face.texture];if(!command.texture)return;}
+      else {command.texture=options.textures?.[face.texture]||model.textures?.[face.texture];if(!command.texture)return;}
       queue.add(command);facesQueued+=1;
     }
   });

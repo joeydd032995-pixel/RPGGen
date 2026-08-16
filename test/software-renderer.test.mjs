@@ -170,11 +170,13 @@ test('rigged GLB import preserves skin, animation, material, and dominant-joint 
 });
 
 test('equipment attachment preserves the base joint pivot and follows its label pose', () => {
-  const base={vertices:[{x:0,y:0,z:0,label:'body'},{x:2,y:0,z:0,label:'arm'}],faces:[]};
-  const equipment={vertices:[{x:0,y:0,z:0,label:'rigid'}],faces:[]};
-  const equipped=attachEquipment(base,equipment,{label:'arm',translate:{x:3,y:0,z:0}});
+  const base={vertices:[{x:0,y:0,z:0,label:'body'},{x:2,y:0,z:0,label:'arm'}],faces:[],textures:{image_0:'body'}};
+  const equipment={vertices:[{x:0,y:0,z:0,label:'rigid'}],faces:[{a:0,b:0,c:0,texture:'image_0'}],textures:{image_0:'blade'}};
+  const equipped=attachEquipment(base,equipment,{name:'sword',label:'arm',translate:{x:3,y:0,z:0}});
   assert.equal(base.vertices.length,2);
   assert.deepEqual(equipped.labelPivots.arm,{x:2,y:0,z:0});
+  assert.deepEqual(equipped.textures,{image_0:'body','sword:image_0':'blade'});
+  assert.equal(equipped.faces[0].texture,'sword:image_0');
   const posed=applyLabelPose(equipped,{arm:{label:'arm',rotateZ:Math.PI/2}});
   assert.ok(Math.abs(posed.vertices[1].x-2)<1e-9);
   assert.ok(Math.abs(posed.vertices[2].y-1)<1e-9);
@@ -228,7 +230,7 @@ test('demo frame has deterministic raw pixel output', () => {
     renderCommands(surface,buildDemoScene(0,palette),palette);
     return hashSurface(surface);
   };
-  assert.equal(render(),'cbead936');
+  assert.equal(render(),'23af56e3');
 });
 
 test('licensed scenery, character, equipment, and overlays have a stable integrated frame hash', () => {
@@ -236,10 +238,13 @@ test('licensed scenery, character, equipment, and overlays have a stable integra
   const loadPath=(path)=>{const bytes=readFileSync(new URL(path,import.meta.url));return parseGlbModel(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength));};
   const knight=loadPath('../assets/models/kaykit-adventurers/knight-classic.glb');
   const sword=loadPath('../assets/models/kaykit-fantasy-weapons/sword-a.glb');
+  assert.equal(knight.embeddedImages.length,1);
+  assert.equal(knight.vertices.every(vertex=>vertex.uv?.length===2),true);
+  assert.equal(knight.faces.every(face=>face.texture==='image_0'),true);
   const equipped=prepareKayKitKnight(knight,sword);
-  assert.deepEqual(validateModelBudget(equipped),{vertices:604,faces:775,materials:2});
+  assert.deepEqual(validateModelBudget(equipped),{vertices:2010,faces:1337,materials:2});
   const assets={tree:load('tree_oak'),rock:load('rock_largeC'),bush:load('plant_bushDetailed'),log:load('log'),knight:equipped};
   const surface=createSurface(320,200);clearSurface(surface,0x0d1218);
   renderCommands(surface,buildDemoScene(0,palette,assets),palette);drawDemoOverlay(surface,0);
-  assert.equal(hashSurface(surface),'793fffdb');
+  assert.equal(hashSurface(surface),'1137371c');
 });

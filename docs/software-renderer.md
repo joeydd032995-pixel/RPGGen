@@ -14,8 +14,10 @@ It renders into an explicit RGBA byte buffer and only uses Canvas 2D to present 
 - Instanced low-poly models, camera/view transforms, near-plane clipping, back-face culling, and directional lighting.
 - Label-group translation and rotation for rigid, keyframed character posing without weighted skinning.
 - Integer alpha compositing, raw framebuffer hashing, and a standalone 320x200 browser demo.
-- A primary-game presentation bridge driven by live Phaser terrain and entity state, with Phaser
-  retained as the movement, collision, streaming, and input coordinator.
+- Embedded GLB PNG extraction, conventional UV preservation, browser-side 128x128 atlas preparation,
+  and perspective-correct textured model rendering.
+- A responsive primary-game presentation layer with portrait/landscape camera profiles, authored
+  settlement dressing, cached articulated poses, and projected combat indicators.
 
 Open `software-renderer.html` through the Vite development server to inspect the three fill modes.
 The frame slider uses caller-supplied integer frames; it does not depend on wall-clock time.
@@ -24,9 +26,10 @@ The frame slider uses caller-supplied integer frames; it does not depend on wall
 
 The same commands, palette brightness, texture data, and output dimensions must produce the same raw
 RGBA hash. Browser screenshots are not the source of truth because browser color management and CSS
-scaling can differ. The current procedural frame-zero test hash is `cbead936`. The browser demo
+scaling can differ. The current procedural frame-zero test hash is `23af56e3`. The browser demo
 adds locally licensed GLB scenery and project-owned overlays after those assets load; that integrated
-frame hash is `793fffdb` with the licensed KayKit knight and sword loaded.
+frame hash is `1137371c` with the licensed KayKit knight and sword loaded in deterministic flat-color
+fixture mode. Browser-loaded KayKit models additionally use their embedded 128x128 gradient atlases.
 
 The current Node benchmark averages approximately 26.2 ms per procedural 320x200 frame on the
 development host, improved from the initial 33.7 ms baseline. The complete licensed scene averages

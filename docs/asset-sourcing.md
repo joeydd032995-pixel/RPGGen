@@ -21,9 +21,10 @@ No game-cache extraction, fan-wiki models, or assets derived from RuneScape clie
 - License: CC0 1.0 on each author-published page.
 - Status: imported from the free archives with archive and selected-file checksums under
   `assets/external/kaykit/`. The shipped reference actor is the Knight reduced with
-  GLTF Transform and Meshoptimizer from 5,328 vertices/5,800 faces to 323 vertices/571 faces. The
+  GLTF Transform and Meshoptimizer from 5,328 vertices/5,800 faces to 1,729 vertices/1,133 faces while
+  preserving the embedded gradient atlas and UVs. The
   selected `sword_A` is reduced to 281 vertices/204 faces. Their composed runtime model remains
-  inside the 2,048-vertex/face budget at 604 vertices and 775 faces.
+  inside the 2,048-vertex/face budget at 2,010 vertices and 1,337 faces.
 
 KayKit is preferred over the newer Quaternius base because its silhouette and shared gradient atlas
 fit the target while remaining substantially more plausible for a CPU renderer. The animation
