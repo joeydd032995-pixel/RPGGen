@@ -30,6 +30,13 @@ test('generation drives factions and biome presentation', () => {
   assert.match(source, /propSprites = \(data\.props\|\|\[\]\)\.map/);
 });
 
+test('primary gameplay uses the software-rendered low-poly world view', () => {
+  assert.match(source, /id="software-game-view"/);
+  assert.match(source, /function buildSoftwareWorldSnapshot\(\)/);
+  assert.match(source, /softwareView\.render\(buildSoftwareWorldSnapshot\(\),time\)/);
+  assert.match(source, /src="\.\/src\/gameplay-view\.mjs"/);
+});
+
 test('interactive overlays expose accessibility semantics', () => {
   assert.match(source, /role="dialog" aria-modal="true"/);
   assert.match(source, /prefers-reduced-motion:reduce/);

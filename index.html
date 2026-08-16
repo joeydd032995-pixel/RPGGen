@@ -139,6 +139,9 @@ select{ appearance:none; -webkit-appearance:none; background-image:linear-gradie
 #screen-game{ background:#000; }
 #game-host{ position:absolute; inset:0; width:100%; height:100%; }
 #game-host canvas{ display:block; width:100%; height:100%; }
+#software-game-view{ position:absolute; inset:0; z-index:2; width:100%; height:100%; object-fit:cover; image-rendering:pixelated; pointer-events:none; opacity:0; transition:opacity .3s; }
+.software-world-ready #software-game-view{ opacity:1; }
+.software-world-ready #game-host canvas{ opacity:0; }
 
 #hud{
   position:absolute; top:calc(10px + var(--safe-t)); left:10px; right:10px; z-index:20;
@@ -452,6 +455,7 @@ select{ appearance:none; -webkit-appearance:none; background-image:linear-gradie
   <!-- ===================== GAME SCREEN ===================== -->
   <div id="screen-game" class="screen hidden">
     <div id="game-host"></div>
+    <canvas id="software-game-view" width="320" height="200" aria-label="Low-poly rendered game world"></canvas>
 
     <div id="hud">
       <div id="hud-main">
@@ -572,6 +576,7 @@ select{ appearance:none; -webkit-appearance:none; background-image:linear-gradie
   </div>
 
 </div>
+<script type="module" src="./src/gameplay-view.mjs"></script>
 <script src="https://cdn.jsdelivr.net/npm/phaser@3.85.2/dist/phaser.min.js" onerror="document.getElementById('boot-error').classList.add('open')"></script>
 <script>
 /* PromptRealm MMORPG Generator — main script (systems appended below in order). */
@@ -1671,6 +1676,33 @@ function biomeAt(wtx, wty){
   const lx = ((wtx%CHUNK_SIZE)+CHUNK_SIZE)%CHUNK_SIZE, ly = ((wty%CHUNK_SIZE)+CHUNK_SIZE)%CHUNK_SIZE;
   return chunk.biomeGrid[ly*CHUNK_SIZE+lx];
 }
+function buildSoftwareWorldSnapshot(){
+  const columns=15,rows=15,halfX=Math.floor(columns/2),halfY=Math.floor(rows/2);
+  const centerTileX=Math.floor(STATE.player.x/TILE),centerTileY=Math.floor(STATE.player.y/TILE),cells=[];
+  for (let row=0;row<rows;row++) for (let column=0;column<columns;column++){
+    const tileX=centerTileX+column-halfX,tileY=centerTileY+row-halfY;
+    const biome=biomeAt(tileX,tileY);
+    cells.push({
+      color:biome?biome.colorHex:'#26313a',
+      height:biome&&biome.walkable?(hashLattice(tileX,tileY,STATE.layoutSalt+991)*5-2.5):-8,
+    });
+  }
+  const props=[];
+  STATE.chunkCache.forEach(chunk => (chunk.props||[]).forEach((prop,index) => {
+    const x=(chunk.cx*CHUNK_SIZE+prop.localX)*TILE+TILE/2,y=(chunk.cy*CHUNK_SIZE+prop.localY)*TILE+TILE/2;
+    const distance=Math.hypot(x-STATE.player.x,y-STATE.player.y);
+    if (distance>260) return;
+    props.push({x,y,distance,kind:prop.texture==='prop_rock'?'rock':prop.texture==='prop_shard'?'rock':'tree',rotation:hashLattice(chunk.cx*37+index,chunk.cy*41-index,STATE.layoutSalt)*Math.PI*2});
+  }));
+  props.sort((a,b)=>a.distance-b.distance);
+  return {
+    player:{x:STATE.player.x,y:STATE.player.y,facing:STATE.facingSector},
+    terrain:{columns,rows,spacing:TILE,originX:(centerTileX+.5)*TILE,originY:(centerTileY+.5)*TILE,key:STATE.worldConfig.zoneIndex+'|'+centerTileX+'|'+centerTileY,cells},
+    props,
+    npcs:STATE.npcs.map(npc=>({x:npc.x,y:npc.y,color:npc.colorHex,quest:!!npc.questId,rotationY:(npc.facingSector||0)*Math.PI/4})),
+    enemies:STATE.enemies.map(enemy=>({x:enemy.x,y:enemy.y,rotationY:hashToInt(enemy.id)%628/100})),
+  };
+}
 function walkableAtPixel(px, py){
   const wtx = Math.floor(px/TILE), wty = Math.floor(py/TILE);
   const b = biomeAt(wtx,wty);
@@ -2010,6 +2042,8 @@ class WorldScene extends Phaser.Scene{
     updateInteractProximity();
     updateAtmosphere(this);
     redrawMinimap(false);
+    const softwareView=window.__promptRealmSoftwareView;
+    if (softwareView&&softwareView.wantsFrame(time)) softwareView.render(buildSoftwareWorldSnapshot(),time);
   }
 }
 function updateAtmosphere(scene){

@@ -14,6 +14,8 @@ It renders into an explicit RGBA byte buffer and only uses Canvas 2D to present 
 - Instanced low-poly models, camera/view transforms, near-plane clipping, back-face culling, and directional lighting.
 - Label-group translation and rotation for rigid, keyframed character posing without weighted skinning.
 - Integer alpha compositing, raw framebuffer hashing, and a standalone 320x200 browser demo.
+- A primary-game presentation bridge driven by live Phaser terrain and entity state, with Phaser
+  retained as the movement, collision, streaming, and input coordinator.
 
 Open `software-renderer.html` through the Vite development server to inspect the three fill modes.
 The frame slider uses caller-supplied integer frames; it does not depend on wall-clock time.
