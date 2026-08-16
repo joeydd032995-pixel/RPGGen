@@ -3,6 +3,7 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 
 const source = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+const gameplayViewSource = readFileSync(new URL('../src/gameplay-view.mjs', import.meta.url), 'utf8');
 
 test('runtime has named deterministic streams and save support', () => {
   assert.match(source, /function getRunRng\(name\)/);
@@ -30,11 +31,14 @@ test('generation drives factions and biome presentation', () => {
   assert.match(source, /propSprites = \(data\.props\|\|\[\]\)\.map/);
 });
 
-test('primary gameplay uses the responsive textured low-poly world view', () => {
+test('primary gameplay uses the responsive GPU world view', () => {
   assert.match(source,/id="software-game-view"/);
   assert.match(source,/function buildSoftwareWorldSnapshot\(\)/);
   assert.match(source,/softwareView\.render\(buildSoftwareWorldSnapshot\(\),time\)/);
   assert.match(source,/src="\.\/src\/gameplay-view\.mjs"/);
+  assert.match(gameplayViewSource,/new THREE\.WebGLRenderer/);
+  assert.match(gameplayViewSource,/THREE\.ACESFilmicToneMapping/);
+  assert.match(gameplayViewSource,/THREE\.PCFSoftShadowMap/);
   assert.match(source,/const columns=19,rows=43/);
   assert.match(source,/const clearing=Math\.max\(Math\.abs\(spawnDX\),Math\.abs\(spawnDY\)\)<22/);
   assert.match(source,/const path=clearing&&\(spawnDX===0\|\|spawnDY===0\)/);
