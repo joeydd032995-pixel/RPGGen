@@ -1,0 +1,14 @@
+{
+  "name": "promptrealm",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "check": "npm run build",
+    "test": "node --test test/*.test.mjs",
+    "serve": "vite --host 127.0.0.1",
+    "build": "vite build"
+  },
+  "devDependencies": {
+    "vite": "^6.1.0"
+  }
+}

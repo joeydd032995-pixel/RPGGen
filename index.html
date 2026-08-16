@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>PromptRealm — MMORPG Generator</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23e3ab4f'/%3E%3Cstop offset='.5' stop-color='%239f7fe0'/%3E%3Cstop offset='1' stop-color='%235fb8dd'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%230a0d12'/%3E%3Crect x='4' y='4' width='24' height='24' rx='6' fill='url(%23g)'/%3E%3C/svg%3E">
 <style>
@@ -28,6 +28,9 @@ html,body{
 }
 input,textarea{ -webkit-user-select:text; user-select:text; touch-action:manipulation; }
 button{ font-family:inherit; -webkit-user-select:none; user-select:none; touch-action:manipulation; }
+button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,[tabindex]:focus-visible{
+  outline:3px solid var(--accent-2); outline-offset:3px;
+}
 #app{ position:fixed; inset:0; width:100%; height:100%; overflow:hidden; }
 .screen{
   position:absolute; inset:0; display:flex; flex-direction:column; overflow:hidden;
@@ -122,7 +125,7 @@ select{ appearance:none; -webkit-appearance:none; background-image:linear-gradie
 .archetype-grid{ display:grid; grid-template-columns:1fr; gap:10px; padding:0 20px; max-width:640px; margin:0 auto; width:100%; }
 @media(min-width:560px){ .archetype-grid{ grid-template-columns:1fr 1fr 1fr; } }
 .archetype-card{
-  background:var(--bg-1); border:1.5px solid var(--border); border-radius:var(--radius); padding:14px; cursor:pointer; text-align:left;
+  background:var(--bg-1); border:1.5px solid var(--border); border-radius:var(--radius); padding:14px; cursor:pointer; text-align:left; color:var(--text); width:100%;
 }
 .archetype-card.sel{ border-color:var(--accent); background:var(--bg-2); box-shadow:0 0 0 3px rgba(227,171,79,.15); }
 .archetype-card h4{ margin:0 0 4px; font-size:1rem; }
@@ -224,7 +227,7 @@ select{ appearance:none; -webkit-appearance:none; background-image:linear-gradie
 @media(min-width:560px){ .inv-grid{ grid-template-columns:repeat(4,1fr); } }
 .inv-slot{
   aspect-ratio:1; background:var(--bg-1); border:1px solid var(--border); border-radius:12px; display:flex; flex-direction:column;
-  align-items:center; justify-content:center; gap:2px; padding:6px; cursor:pointer; position:relative;
+  align-items:center; justify-content:center; gap:2px; padding:6px; cursor:pointer; position:relative; color:var(--text); width:100%;
 }
 .inv-slot .ic{ font-size:1.4rem; }
 .inv-slot .nm{ font-size:.6rem; color:var(--text-dim); text-align:center; line-height:1.15; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%; }
@@ -305,6 +308,9 @@ select{ appearance:none; -webkit-appearance:none; background-image:linear-gradie
 #boot-error .card{ max-width:420px; }
 
 .hidden{ display:none !important; }
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{ animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.001ms !important; scroll-behavior:auto !important; }
+}
 ::-webkit-scrollbar{ width:6px; height:6px; }
 ::-webkit-scrollbar-thumb{ background:var(--border); border-radius:3px; }
 </style>
@@ -335,6 +341,7 @@ select{ appearance:none; -webkit-appearance:none; background-image:linear-gradie
     <div class="footer-actions">
       <button class="btn btn-primary btn-block" id="btn-begin-interview" style="max-width:400px;">Begin Interview</button>
       <button class="btn btn-ghost btn-block" id="btn-quickstart" style="max-width:400px;">Skip — use smart defaults</button>
+      <button class="btn btn-ghost btn-block hidden" id="btn-continue" style="max-width:400px;">Continue Saved Adventure</button>
     </div>
   </div>
 
@@ -449,15 +456,15 @@ select{ appearance:none; -webkit-appearance:none; background-image:linear-gradie
     <div id="hud">
       <div id="hud-main">
         <div id="hud-name-row"><span id="hud-name">Hero</span><span id="hud-lvl">Lv1</span></div>
-        <div class="bar hp"><div class="fill" id="hud-hp-fill" style="width:100%;"></div></div>
-        <div class="bar xp"><div class="fill" id="hud-xp-fill" style="width:0%;"></div></div>
+        <div class="bar hp" role="progressbar" aria-label="Health" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100" id="hud-hp-bar"><div class="fill" id="hud-hp-fill" style="width:100%;"></div></div>
+        <div class="bar xp" role="progressbar" aria-label="Experience" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="hud-xp-bar"><div class="fill" id="hud-xp-fill" style="width:0%;"></div></div>
         <div id="hud-gold">⛁ 0 gold</div>
       </div>
       <div class="spacer"></div>
-      <div id="minimap-wrap"><canvas id="minimap-canvas" width="112" height="112"></canvas></div>
+      <div id="minimap-wrap"><canvas id="minimap-canvas" width="112" height="112" role="img" aria-label="Explored world minimap"></canvas></div>
     </div>
 
-    <div id="interact-prompt">Tap Interact</div>
+    <div id="interact-prompt" role="status" aria-live="polite">Tap Interact</div>
     <div id="joystick-zone">
       <div id="joystick-base"></div>
       <div id="joystick-nub"></div>
@@ -467,23 +474,24 @@ select{ appearance:none; -webkit-appearance:none; background-image:linear-gradie
       <button class="ab-btn" id="ab-quests"><span class="ic">📜</span><span class="lb">Quests</span><span class="badge hidden" id="badge-quests">0</span></button>
       <button class="ab-btn" id="ab-inventory"><span class="ic">🎒</span><span class="lb">Inventory</span></button>
       <button class="ab-btn primary" id="ab-interact"><span class="ic">✋</span><span class="lb">Interact</span></button>
-      <button class="ab-btn" id="ab-world"><span class="ic">🌍</span><span class="lb">World</span></button>
-      <button class="ab-btn" id="ab-regen"><span class="ic">🔀</span><span class="lb">New Zone</span></button>
+       <button class="ab-btn" id="ab-world"><span class="ic">🌍</span><span class="lb">World</span></button>
+       <button class="ab-btn" id="ab-save"><span class="ic">💾</span><span class="lb">Save</span></button>
+       <button class="ab-btn" id="ab-regen"><span class="ic">🔀</span><span class="lb">New Zone</span></button>
     </div>
 
-    <div class="sheet-backdrop" id="sheet-backdrop"></div>
+    <div class="sheet-backdrop" id="sheet-backdrop" aria-hidden="true"></div>
 
     <!-- Quest log sheet -->
-    <div class="sheet" id="panel-quests">
+    <div class="sheet" id="panel-quests" role="dialog" aria-modal="true" aria-labelledby="title-quests" aria-hidden="true" inert>
       <div class="sheet-handle"></div>
-      <div class="sheet-head"><h3>Quest Log</h3><button class="sheet-close" data-close>✕</button></div>
+      <div class="sheet-head"><h3 id="title-quests" tabindex="-1">Quest Log</h3><button class="sheet-close" data-close aria-label="Close quest log">✕</button></div>
       <div class="sheet-body" id="quest-list"></div>
     </div>
 
     <!-- Inventory sheet -->
-    <div class="sheet" id="panel-inventory">
+    <div class="sheet" id="panel-inventory" role="dialog" aria-modal="true" aria-labelledby="title-inventory" aria-hidden="true" inert>
       <div class="sheet-handle"></div>
-      <div class="sheet-head"><h3>Inventory</h3><button class="sheet-close" data-close>✕</button></div>
+      <div class="sheet-head"><h3 id="title-inventory" tabindex="-1">Inventory</h3><button class="sheet-close" data-close aria-label="Close inventory">✕</button></div>
       <div class="sheet-body">
         <div class="stat-strip" id="inv-stats"></div>
         <div class="gear-row" id="gear-row"></div>
@@ -492,9 +500,9 @@ select{ appearance:none; -webkit-appearance:none; background-image:linear-gradie
     </div>
 
     <!-- World / lore sheet -->
-    <div class="sheet" id="panel-world">
+    <div class="sheet" id="panel-world" role="dialog" aria-modal="true" aria-labelledby="title-world" aria-hidden="true" inert>
       <div class="sheet-handle"></div>
-      <div class="sheet-head"><h3>World Lore</h3><button class="sheet-close" data-close>✕</button></div>
+      <div class="sheet-head"><h3 id="title-world" tabindex="-1">World Lore</h3><button class="sheet-close" data-close aria-label="Close world lore">✕</button></div>
       <div class="sheet-body">
         <div class="section-title" style="margin:0 0 8px;padding:0;">Lore Pillars</div>
         <div id="world-lore-list"></div>
@@ -506,9 +514,9 @@ select{ appearance:none; -webkit-appearance:none; background-image:linear-gradie
     </div>
 
     <!-- Dialogue sheet -->
-    <div class="sheet" id="panel-dialogue">
+    <div class="sheet" id="panel-dialogue" role="dialog" aria-modal="true" aria-labelledby="title-dialogue" aria-hidden="true" inert>
       <div class="sheet-handle"></div>
-      <div class="sheet-head"><h3>Conversation</h3><button class="sheet-close" data-close>✕</button></div>
+      <div class="sheet-head"><h3 id="title-dialogue" tabindex="-1">Conversation</h3><button class="sheet-close" data-close aria-label="End conversation">✕</button></div>
       <div class="sheet-body">
         <div class="npc-head"><canvas id="npc-portrait" width="52" height="52"></canvas><div><div id="npc-name">Name</div><div id="npc-role">Role</div></div></div>
         <div id="dialogue-text">...</div>
@@ -517,9 +525,9 @@ select{ appearance:none; -webkit-appearance:none; background-image:linear-gradie
     </div>
 
     <!-- Combat sheet (non-dismissible via backdrop tap) -->
-    <div class="sheet" id="panel-combat">
+    <div class="sheet" id="panel-combat" role="dialog" aria-modal="true" aria-labelledby="title-combat" aria-hidden="true" inert>
       <div class="sheet-handle"></div>
-      <div class="sheet-head"><h3>Combat</h3><span class="pill" id="combat-turn-pill">Your Turn</span></div>
+      <div class="sheet-head"><h3 id="title-combat" tabindex="-1">Combat</h3><span class="pill" id="combat-turn-pill">Your Turn</span></div>
       <div class="sheet-body">
         <div class="combat-top">
           <div class="combatant">
@@ -532,7 +540,7 @@ select{ appearance:none; -webkit-appearance:none; background-image:linear-gradie
             <div class="bar enemy-hp"><div class="fill" id="cbt-enemy-hp" style="width:100%;"></div></div>
           </div>
         </div>
-        <div id="combat-log"></div>
+        <div id="combat-log" role="log" aria-live="polite" aria-relevant="additions"></div>
         <div class="combat-actions">
           <button class="cbtn atk" id="cbt-attack">⚔️ Attack</button>
           <button class="cbtn defend" id="cbt-defend">🛡️ Defend</button>
@@ -543,10 +551,10 @@ select{ appearance:none; -webkit-appearance:none; background-image:linear-gradie
       </div>
     </div>
 
-    <div id="toast-host"></div>
+    <div id="toast-host" role="status" aria-live="polite"></div>
 
-    <div id="modal-host">
-      <div class="modal-card" id="modal-card"></div>
+    <div id="modal-host" role="dialog" aria-modal="true" aria-hidden="true">
+      <div class="modal-card" id="modal-card" tabindex="-1"></div>
     </div>
 
     <div id="zone-transition">
@@ -596,12 +604,16 @@ function mulberry32(seed){
   };
 }
 class RNG{
-  constructor(seedStr){
+  constructor(seedStr, state){
     this.seedStr = String(seedStr);
-    const seedFn = xmur3(this.seedStr);
-    this._next = mulberry32(seedFn());
+    this.state = state === undefined ? xmur3(this.seedStr)() : (state >>> 0);
   }
-  next(){ return this._next(); }
+  next(){
+    let a = this.state = (this.state + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  }
   range(min,max){ return min + this.next()*(max-min); }
   int(min,maxExclusive){ return Math.floor(this.range(min,maxExclusive)); }
   pick(arr){ return arr[this.int(0,arr.length)]; }
@@ -1016,7 +1028,7 @@ function selectInterviewQuestions(signals){
   // across sessions instead of always asking the same fixed 12 questions.
   const byAxis = new Map();
   candidates.forEach(q => { if (!byAxis.has(q.axis)) byAxis.set(q.axis, []); byAxis.get(q.axis).push(q); });
-  const varietyRng = new RNG(String(Math.random()));
+  const varietyRng = childRNG(signals.genre+'|'+signals.specificity, 'interview');
   const perAxisPick = [];
   byAxis.forEach(list => {
     list.sort((a,b) => (a.priority||2) - (b.priority||2));
@@ -1051,6 +1063,15 @@ const LAYOUT_ANSWER_MAP = { single_zone:'continent', settlement_cluster:'dungeon
 const DIFFICULTY_ANSWER_MAP = { forgiving:'gentle', standard:'standard', punishing:'harsh', adaptive:'standard' };
 const PROGRESSION_ANSWER_MAP = { gear_driven:'combat', ability_driven:'combat', reputation_driven:'story', lore_driven:'story' };
 const EVENTSTYLE_ANSWER_MAP = { combat_forward:'chaotic', discovery_driven:'calm', social_encounters:'eventful', hazard_puzzle:'eventful' };
+function stableId(value){ return String(value).toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,''); }
+function buildFactionRelations(factions, style){
+  const relations = {};
+  factions.forEach((f,i) => {
+    relations[f.id] = {};
+    factions.forEach((other,j) => { relations[f.id][other.id] = i===j ? 1 : (style==='solitary'?0:-1); });
+  });
+  return relations;
+}
 
 function buildWorldConfig(signals, answers, seedOverride){
   const genre = signals.genre;
@@ -1060,27 +1081,38 @@ function buildWorldConfig(signals, answers, seedOverride){
   const threat = answers.threat || signals.threat || 'beasts';
   const terrain = answers.terrain || signals.terrain || 'forest';
   const structure = answers.structure || signals.structure || 'sandbox';
-  const pacing = signals.pacing || 'balanced';
+  const pacing = answers.pacing || signals.pacing || 'balanced';
+  const threatShape = answers.q_threat_shape || 'diffuse_swarm';
+  const terrainClimate = answers.q_terrain_climate || 'temperate_mild';
+  const factionStyle = answers.factions || 'duel';
+  const factionRelation = answers.q_factions_relation || 'shifting_allegiance';
   const layout = (answers.layout && LAYOUT_ANSWER_MAP[answers.layout]) || defaultLayoutFor(structure, terrain);
   const difficulty = (answers.difficulty && DIFFICULTY_ANSWER_MAP[answers.difficulty]) || 'standard';
   const progressionFocus = (answers.progression && PROGRESSION_ANSWER_MAP[answers.progression]) || 'balanced';
-  const eventStyle = (answers.eventStyle && EVENTSTYLE_ANSWER_MAP[answers.eventStyle]) || (pacing==='fast' ? 'chaotic' : (pacing==='slow' ? 'calm' : 'eventful'));
+  const normalizedPacing = { slow_burn:'slow', frantic:'fast', punctuated:'balanced' }[pacing] || pacing;
+  const eventStyle = (answers.eventStyle && EVENTSTYLE_ANSWER_MAP[answers.eventStyle]) || (normalizedPacing==='fast' ? 'chaotic' : (normalizedPacing==='slow' ? 'calm' : 'eventful'));
   const seed = seedOverride || String(Math.abs(hashToInt((answers.rawPrompt||'')+'|'+Date.now())) % 1000000000);
 
   const factionsPool = FACTION_ARCHETYPES[genre] || FACTION_ARCHETYPES.fantasy;
   const rng = childRNG(seed, 'factions');
-  const factionCount = 2 + (rng.chance(0.5) ? 1 : 0);
-  const factions = rng.shuffle(factionsPool).slice(0, factionCount).map(([name,desc]) => ({ name, description:desc, rep:0 }));
+  const factionCount = { solitary:1, duel:2, fractured:3, dominion:2 }[factionStyle] || 2;
+  const factions = rng.shuffle(factionsPool).slice(0, factionCount).map(([name,desc]) => ({ id:stableId(name), name, description:desc }));
+  const factionRelations = buildFactionRelations(factions, factionStyle);
 
   const lorePillars = buildLorePillars(genre, tone, threat, terrain, rng);
 
   return {
-    seed, genre, tone, scale, magictech, threat, terrain, structure, pacing,
+    seed, genre, tone, scale, magictech, threat, threatShape, terrain, terrainClimate, structure, pacing:normalizedPacing,
     layout, difficulty, progressionFocus, eventStyle,
     biomePalette: (PR_DATA.biomes.filter(b=>b.genre===genre).map(b=>b.id)),
-    lorePillars, factions,
+    lorePillars, factions, factionRelations,
     enemyThemes: [threat], questThemes: ['kill','collect','explore','deliver','investigate'],
-    npcCulture: genre,
+    npcCulture: genre, factionStyle, factionRelation,
+    generation: {
+      poiChance: { intimate:0.16, regional:0.22, epic:0.3 }[scale] || 0.22,
+      npcCount: { intimate:4, regional:6, epic:8 }[scale] || 6,
+      techTier: { low:0, mid:1, high:2 }[magictech] || 1,
+    },
     zoneIndex: 0,
   };
 }
@@ -1105,6 +1137,23 @@ function buildLorePillars(genre, tone, threat, terrain, rng){
    8. GENERIC UI HELPERS (toasts, sheets, modals, screens)
    ================================================================== */
 const $ = (id) => document.getElementById(id);
+const REDUCED_MOTION = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+let focusReturnTarget = null;
+function setDialogState(el, open){
+  el.setAttribute('aria-hidden', String(!open));
+  el.inert = !open;
+  if (open){
+    focusReturnTarget = document.activeElement;
+    requestAnimationFrame(() => (el.querySelector('h3,[autofocus],button,[tabindex]')||el).focus());
+  }
+}
+function isGameplayLocked(){
+  return !!(STATE.combat || STATE.dialogue || $('modal-host').classList.contains('open') || ALL_SHEET_IDS.some(id => $(id).classList.contains('open')));
+}
+function syncGameplayLock(){
+  STATE.gameplayLocked = isGameplayLocked();
+  if (STATE.gameplayLocked){ STATE.joyVector.x = 0; STATE.joyVector.y = 0; STATE.dragVector.x = 0; STATE.dragVector.y = 0; }
+}
 function showScreen(id){
   document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
   $(id).classList.remove('hidden');
@@ -1122,29 +1171,65 @@ function showToast(msg, kind){
 }
 const ALL_SHEET_IDS = ['panel-quests','panel-inventory','panel-world','panel-dialogue','panel-combat'];
 function closeAllSheets(){
-  ALL_SHEET_IDS.forEach(id => $(id).classList.remove('open'));
+  if (STATE.combat) { syncGameplayLock(); return; }
+  ALL_SHEET_IDS.forEach(id => { $(id).classList.remove('open'); setDialogState($(id), false); });
   $('sheet-backdrop').classList.remove('open');
+  $('sheet-backdrop').setAttribute('aria-hidden','true');
   // Conversation over -> exploration must unfreeze. Without this, WorldScene.update()'s
   // dialogue guard keeps returning early forever and movement appears "broken".
   STATE.dialogue = null;
+  syncGameplayLock();
+  if (focusReturnTarget && focusReturnTarget.focus) focusReturnTarget.focus();
 }
 function openSheet(id){
-  ALL_SHEET_IDS.forEach(sid => { if (sid!==id) $(sid).classList.remove('open'); });
+  if (STATE.combat && id !== 'panel-combat') return;
+  ALL_SHEET_IDS.forEach(sid => { if (sid!==id){ $(sid).classList.remove('open'); setDialogState($(sid), false); } });
   if (id !== 'panel-dialogue') STATE.dialogue = null; // switching sheets away from a conversation ends it
   $(id).classList.add('open');
+  setDialogState($(id), true);
   $('sheet-backdrop').classList.add('open');
+  $('sheet-backdrop').setAttribute('aria-hidden','false');
+  syncGameplayLock();
 }
 function closeSheet(id){
+  if (id === 'panel-combat' && STATE.combat) return;
   $(id).classList.remove('open');
+  setDialogState($(id), false);
   if (id === 'panel-dialogue') STATE.dialogue = null; // see closeAllSheets note
   const anyOpen = ALL_SHEET_IDS.some(sid => $(sid).classList.contains('open'));
-  if (!anyOpen) $('sheet-backdrop').classList.remove('open');
+  if (!anyOpen){ $('sheet-backdrop').classList.remove('open'); $('sheet-backdrop').setAttribute('aria-hidden','true'); }
+  syncGameplayLock();
+  if (focusReturnTarget && focusReturnTarget.focus) focusReturnTarget.focus();
 }
 function openModal(html){
   $('modal-card').innerHTML = html;
   $('modal-host').classList.add('open');
+  $('modal-host').setAttribute('aria-hidden','false');
+  focusReturnTarget = document.activeElement;
+  requestAnimationFrame(() => $('modal-card').focus());
+  syncGameplayLock();
 }
-function closeModal(){ $('modal-host').classList.remove('open'); }
+function closeModal(){
+  $('modal-host').classList.remove('open'); $('modal-host').setAttribute('aria-hidden','true'); syncGameplayLock();
+  if (focusReturnTarget && focusReturnTarget.focus) focusReturnTarget.focus();
+}
+function initDialogKeyboard(){
+  document.addEventListener('keydown', (event) => {
+    if (event.key==='Escape'){
+      if ($('modal-host').classList.contains('open')) closeModal();
+      else if (!STATE.combat && ALL_SHEET_IDS.some(id => $(id).classList.contains('open'))) closeAllSheets();
+      return;
+    }
+    if (event.key!=='Tab' || !isGameplayLocked()) return;
+    const root = $('modal-host').classList.contains('open') ? $('modal-card') : document.querySelector('.sheet.open');
+    if (!root) return;
+    const items = Array.from(root.querySelectorAll('button:not(:disabled),input,select,textarea,[tabindex]:not([tabindex="-1"])'));
+    if (!items.length) return;
+    const first=items[0], last=items[items.length-1];
+    if (event.shiftKey && document.activeElement===first){ event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement===last){ event.preventDefault(); first.focus(); }
+  });
+}
 
 /* ==================================================================
    9. ARCHETYPES (character creator)
@@ -1192,7 +1277,8 @@ let selectedArchetypeId = null;
 function initTitleScreen(){
   const chipsHost = $('example-chips');
   EXAMPLE_PROMPTS.forEach(p => {
-    const chip = document.createElement('div');
+    const chip = document.createElement('button');
+    chip.type = 'button';
     chip.className = 'chip';
     chip.textContent = p.length > 34 ? p.slice(0,34)+'…' : p;
     chip.title = p;
@@ -1201,6 +1287,11 @@ function initTitleScreen(){
   });
   $('btn-begin-interview').addEventListener('click', () => beginFromTitle(false));
   $('btn-quickstart').addEventListener('click', () => beginFromTitle(true));
+  const saved = readSavedGame();
+  if (saved){
+    $('btn-continue').classList.remove('hidden');
+    $('btn-continue').addEventListener('click', () => restoreSavedGame(saved));
+  }
   $('btn-skip-rest').addEventListener('click', () => goToSummary());
 }
 
@@ -1232,7 +1323,8 @@ function renderInterviewQuestion(){
     btn.className = 'q-opt';
     btn.innerHTML = '<b>'+escapeHtml(opt.label)+'</b><span>'+escapeHtml(opt.blurb)+'</span>';
     btn.addEventListener('click', () => {
-      interviewAnswers[q.axis] = opt.value;
+      interviewAnswers[q.id] = opt.value;
+      if (q.priority === 1) interviewAnswers[q.axis] = opt.value;
       interviewIndex++;
       if (interviewIndex >= interviewQuestions.length){ goToSummary(); }
       else renderInterviewQuestion();
@@ -1310,8 +1402,15 @@ function readSummaryEdits(){
   if (genreChanged){
     const rng = childRNG(wc.seed, 'factions-re');
     const factionsPool = FACTION_ARCHETYPES[wc.genre] || FACTION_ARCHETYPES.fantasy;
-    wc.factions = rng.shuffle(factionsPool).slice(0,2+(rng.chance(0.5)?1:0)).map(([name,desc])=>({name,description:desc,rep:0}));
+    const count = {solitary:1,duel:2,fractured:3,dominion:2}[wc.factionStyle]||2;
+    wc.factions = rng.shuffle(factionsPool).slice(0,count).map(([name,desc])=>({id:stableId(name),name,description:desc}));
+    wc.factionRelations = buildFactionRelations(wc.factions,wc.factionStyle);
   }
+  wc.generation = {
+    poiChance:{intimate:0.16,regional:0.22,epic:0.3}[wc.scale]||0.22,
+    npcCount:{intimate:4,regional:6,epic:8}[wc.scale]||6,
+    techTier:{low:0,mid:1,high:2}[wc.magictech]||1,
+  };
   if (loreInputsChanged){
     const rng = childRNG(wc.seed, 'lore-re');
     wc.lorePillars = buildLorePillars(wc.genre, wc.tone, wc.threat, wc.terrain, rng);
@@ -1340,7 +1439,8 @@ function renderArchetypeGrid(){
   selectedArchetypeId = list[0].id;
   const maxStat = 24;
   list.forEach(a => {
-    const card = document.createElement('div');
+    const card = document.createElement('button');
+    card.type = 'button';
     card.className = 'archetype-card' + (a.id===selectedArchetypeId ? ' sel' : '');
     card.innerHTML = '<h4>'+escapeHtml(a.name)+'</h4><p>'+escapeHtml(a.description)+'</p>'+
       '<div class="stat-bars">'+
@@ -1364,7 +1464,7 @@ function initCreatorScreen(){
     const list = ARCHETYPES[wc.genre] || ARCHETYPES.fantasy;
     const archetype = list.find(a => a.id===selectedArchetypeId) || list[0];
     let name = ($('in-charname').value||'').trim();
-    if (!name) name = generateName(childRNG(wc.seed,'playername',Date.now()), wc.genre, 'people');
+    if (!name) name = generateName(childRNG(wc.seed,'playername'), wc.genre, 'people');
     bootGame(wc, { name, archetype });
   });
   $('btn-back-summary').addEventListener('click', () => showScreen('screen-summary'));
@@ -1496,7 +1596,73 @@ const STATE = {
   joyVector:{x:0,y:0}, dragVector:{x:0,y:0}, facingSector:2, keys:null, suppressTap:false,
   minimapCtx:null, lastMinimapDraw:0,
   nearestInteractable:null,
+  rngStreams:{}, gameplayLocked:false, pendingSave:null, weatherOverride:null, restoredPOIStates:{}, controlsInitialized:false,
 };
+
+function getRunRng(name){
+  if (!STATE.rngStreams[name]) STATE.rngStreams[name] = new RNG(STATE.worldConfig.seed+'|run|'+name);
+  const stream = STATE.rngStreams[name];
+  if (!(stream instanceof RNG)) STATE.rngStreams[name] = new RNG(stream.seedStr, stream.state);
+  return STATE.rngStreams[name];
+}
+const SAVE_KEY = 'promptrealm-save-v1';
+const SAVE_VERSION = 2;
+function normalizeWorldConfig(wc){
+  wc.factions = (wc.factions||[]).map(f => ({...f,id:f.id||stableId(f.name)}));
+  wc.factionRelations = wc.factionRelations||buildFactionRelations(wc.factions,wc.factionStyle||'duel');
+  wc.generation = wc.generation||{
+    poiChance:{intimate:0.16,regional:0.22,epic:0.3}[wc.scale]||0.22,
+    npcCount:{intimate:4,regional:6,epic:8}[wc.scale]||6,
+    techTier:{low:0,mid:1,high:2}[wc.magictech]||1,
+  };
+  return wc;
+}
+function migrateSave(snapshot){
+  if (!snapshot || typeof snapshot!=='object' || !snapshot.worldConfig || !snapshot.player || !snapshot.player.archetype || !snapshot.player.archetype.id) return null;
+  if ((snapshot.version||1)>SAVE_VERSION) return null;
+  snapshot.worldConfig = normalizeWorldConfig(snapshot.worldConfig);
+  snapshot.questLog = Array.isArray(snapshot.questLog)?snapshot.questLog:[];
+  snapshot.factionRep = snapshot.factionRep&&typeof snapshot.factionRep==='object'?snapshot.factionRep:{};
+  snapshot.worldConfig.factions.forEach(f => {
+    if (snapshot.factionRep[f.id]===undefined && snapshot.factionRep[f.name]!==undefined) snapshot.factionRep[f.id]=snapshot.factionRep[f.name];
+  });
+  snapshot.rngStreams = snapshot.rngStreams&&typeof snapshot.rngStreams==='object'?snapshot.rngStreams:{};
+  snapshot.runtime = snapshot.runtime||{};
+  snapshot.version = SAVE_VERSION;
+  return snapshot;
+}
+function saveGame(){
+  if (!STATE.worldConfig) return;
+  const snapshot = { version:SAVE_VERSION, savedAt:Date.now(), worldConfig:STATE.worldConfig, player:STATE.player, questLog:STATE.questLog, factionRep:STATE.factionRep,
+    rngStreams:Object.fromEntries(Object.entries(STATE.rngStreams).map(([key, rng]) => [key, { seedStr:rng.seedStr, state:rng.state }])),
+    runtime:{distanceAccum:STATE.distanceAccum,nextEventAt:STATE.nextEventAt,exploredCells:Array.from(STATE.exploredCells),poiStates:Object.fromEntries(STATE.pois.map(p=>[p.id,{discovered:p.discovered,shrineUsed:p.shrineUsed,encounterResolved:p.encounterResolved}]))} };
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(snapshot)); showToast('Adventure saved.','good'); }
+  catch (_) { showToast('Save failed: browser storage is unavailable.','bad'); }
+}
+function readSavedGame(){
+  try { return migrateSave(JSON.parse(localStorage.getItem(SAVE_KEY)||'null')); }
+  catch (_) { return null; }
+}
+function restoreSavedGame(snapshot){
+  STATE.pendingSave = snapshot;
+  const archetype = (ARCHETYPES[snapshot.worldConfig.genre]||ARCHETYPES.fantasy).find(a => a.id===snapshot.player.archetype.id) || ARCHETYPES.fantasy[0];
+  bootGame(snapshot.worldConfig, { name:snapshot.player.name, archetype });
+}
+function applyPendingSave(){
+  const snapshot = STATE.pendingSave;
+  if (!snapshot) return;
+  STATE.player = { ...STATE.player, ...snapshot.player, equipped:snapshot.player.equipped||{weapon:null,armor:null} };
+  STATE.questLog = snapshot.questLog||STATE.questLog;
+  STATE.factionRep = snapshot.factionRep||{};
+  STATE.rngStreams = Object.fromEntries(Object.entries(snapshot.rngStreams||{}).map(([key, value]) => [key, new RNG(value.seedStr, value.state)]));
+  STATE.distanceAccum = Number.isFinite(snapshot.runtime.distanceAccum)?snapshot.runtime.distanceAccum:0;
+  STATE.nextEventAt = Number.isFinite(snapshot.runtime.nextEventAt)?snapshot.runtime.nextEventAt:260;
+  STATE.exploredCells = new Set(snapshot.runtime.exploredCells||['0,0']);
+  STATE.restoredPOIStates = snapshot.runtime.poiStates||{};
+  STATE.pois.forEach(p => Object.assign(p,STATE.restoredPOIStates[p.id]||{}));
+  STATE.pendingSave = null;
+  snapPlayerSprite(); redrawMinimap(true); updateQuestBadge(); updateHUD(); showToast('Saved adventure restored.','good');
+}
 
 function biomeAt(wtx, wty){
   const cx = Math.floor(wtx/CHUNK_SIZE), cy = Math.floor(wty/CHUNK_SIZE);
@@ -1510,6 +1676,14 @@ function walkableAtPixel(px, py){
   const b = biomeAt(wtx,wty);
   if (!b) return false; // unloaded chunk edge: block rather than risk falling into the void
   return !!b.walkable;
+}
+function biomeVisualProfile(biome){
+  const text = (biome.id+' '+biome.name+' '+biome.description).toLowerCase();
+  if (STATE.worldConfig.genre==='scifi' || /metal|reactor|station|deck|ruin|scrap/.test(text)) return { prop:'prop_shard', tint:0x8fc9d8, atmosphere:0x173044, alpha:0.08 };
+  if (/snow|ice|frozen|glacier|peak/.test(text) || STATE.worldConfig.terrainClimate==='frozen_exposed') return { prop:'prop_rock', tint:0xd8eff4, atmosphere:0xb7dce8, alpha:0.06 };
+  if (/lava|ash|cinder|scorch|desert|dune/.test(text) || STATE.worldConfig.terrainClimate==='arid_scorched') return { prop:'prop_rock', tint:0xb96d42, atmosphere:0x6b2c18, alpha:0.08 };
+  if (/bog|marsh|grove|forest|thicket|field/.test(text) || STATE.worldConfig.terrainClimate==='humid_overgrown') return { prop:'prop_tuft', tint:0x76a956, atmosphere:0x234b39, alpha:0.07 };
+  return { prop:'prop_rock', tint:0x9b9285, atmosphere:0x182638, alpha:0.045 };
 }
 
 function genChunkData(cx, cy){
@@ -1533,7 +1707,7 @@ function genChunkData(cx, cy){
   }
   const pois = [];
   const isSpawnChunk = (cx===0 && cy===0);
-  if (!isSpawnChunk && rng.chance(0.22)){
+  if (!isSpawnChunk && rng.chance((wc.generation&&wc.generation.poiChance)||0.22)){
     const candidates = [];
     for (let ty=2;ty<CHUNK_SIZE-2;ty++) for (let tx=2;tx<CHUNK_SIZE-2;tx++){
       const idx=ty*CHUNK_SIZE+tx;
@@ -1547,19 +1721,28 @@ function genChunkData(cx, cy){
       STATE.pois.push(poi);
     }
   }
-  return { cx, cy, biomeGrid, walkGrid, pois, tileImage:null, poiSprites:[] };
+  const props = [];
+  const propLimit = REDUCED_MOTION ? 6 : 12;
+  for (let i=0;i<biomeGrid.length && props.length<propLimit;i++){
+    const tx=i%CHUNK_SIZE, ty=Math.floor(i/CHUNK_SIZE), biome=biomeGrid[i];
+    if (!walkGrid[i] || tx<1 || ty<1 || tx>CHUNK_SIZE-2 || ty>CHUNK_SIZE-2 || !rng.chance(0.055)) continue;
+    const profile = biomeVisualProfile(biome);
+    props.push({ localX:tx, localY:ty, texture:profile.prop, tint:profile.tint, scale:rng.range(0.65,1.05) });
+  }
+  return { cx, cy, biomeGrid, walkGrid, pois, props, tileImage:null, poiSprites:[], propSprites:[] };
 }
 function buildPOI(rng, wc, cx, cy, ltx, lty, kind){
   const desc = pickPOIDescriptor(rng, wc.genre, kind);
   let name = desc.name;
   if (STATE.usedPOINames.has(name)) name = generateName(rng, wc.genre, 'places')+' '+capitalize(kind);
   STATE.usedPOINames.add(name);
-  return {
+  const poi = {
     id:'poi_'+cx+'_'+cy+'_'+ltx+'_'+lty, cx, cy, localX:ltx, localY:lty,
     worldX:(cx*CHUNK_SIZE+ltx)*TILE+TILE/2, worldY:(cy*CHUNK_SIZE+lty)*TILE+TILE/2,
     kind, name, description:desc.description, dangerLevel:desc.dangerLevel||0, glyphColorHex:desc.glyphColorHex||'#e3ab4f',
     discovered:false, shrineUsed:false,
   };
+  return Object.assign(poi, STATE.restoredPOIStates[poi.id]||{});
 }
 
 function findSpawnTile(chunkData){
@@ -1598,6 +1781,8 @@ function destroyChunkVisuals(data){
   else if (data.tileImage){ data.tileImage.destroy(); data.tileImage = null; }
   data.poiSprites.forEach(s => { if (STATE.scene) STATE.scene.tweens.killTweensOf(s); s.destroy(); });
   data.poiSprites = [];
+  (data.propSprites||[]).forEach(s => s.destroy());
+  data.propSprites = [];
 }
 
 /* ==================================================================
@@ -1624,6 +1809,10 @@ class BootScene extends Phaser.Scene{
     g.fillStyle(0xffffff,1); g.fillRoundedRect(2,2,28,28,6); g.generateTexture('shape_square',32,32); g.clear();
     g.fillStyle(0xffffff,1); g.beginPath(); g.moveTo(16,1); g.lineTo(31,16); g.lineTo(16,31); g.lineTo(1,16); g.closePath(); g.fillPath(); g.generateTexture('shape_diamond',32,32); g.clear();
     g.fillStyle(0xffffff,1); g.beginPath(); g.moveTo(16,2); g.lineTo(30,29); g.lineTo(2,29); g.closePath(); g.fillPath(); g.generateTexture('shape_triangle',32,32); g.clear();
+    // Reusable primitive scenery keeps biome decoration deterministic and asset-light.
+    g.fillStyle(0xffffff,1); g.fillRect(13,12,6,20); g.fillTriangle(16,0,2,22,30,22); g.generateTexture('prop_tuft',32,34); g.clear();
+    g.fillStyle(0xffffff,1); g.beginPath(); g.moveTo(3,26); g.lineTo(8,8); g.lineTo(22,3); g.lineTo(30,19); g.lineTo(23,29); g.lineTo(8,30); g.closePath(); g.fillPath(); g.generateTexture('prop_rock',32,32); g.clear();
+    g.fillStyle(0xffffff,1); g.fillRect(13,2,6,28); g.fillTriangle(16,0,8,12,24,12); g.generateTexture('prop_shard',32,32); g.clear();
     // player marker: circle + direction notch (legacy/minimap use)
     g.fillStyle(0xffffff,1); g.fillCircle(16,16,13);
     g.fillStyle(0x000000,0.35); g.fillTriangle(16,3,22,13,10,13);
@@ -1730,9 +1919,11 @@ class WorldScene extends Phaser.Scene{
 
     // camera follows an invisible target pinned to the projected player position
     this.cameraTarget = this.add.rectangle(psx, psy, 4, 4, 0x000000, 0);
-    this.cameras.main.startFollow(this.cameraTarget, true, 0.12, 0.12);
+    this.cameras.main.startFollow(this.cameraTarget, true, REDUCED_MOTION?1:0.12, REDUCED_MOTION?1:0.12);
     this.cameras.main.setZoom(1);
     this.cameras.main.setBackgroundColor(0x0a0d12);
+    this.atmosphere = this.add.rectangle(0,0,this.scale.width,this.scale.height,0x182638,0).setOrigin(0).setScrollFactor(0).setDepth(300000);
+    this.currentAtmosphere = '';
 
     this.cursors = this.input.keyboard.createCursorKeys();
     this.wasd = this.input.keyboard.addKeys({ up:'W', down:'S', left:'A', right:'D' });
@@ -1766,16 +1957,17 @@ class WorldScene extends Phaser.Scene{
     this.input.on('gameout', endDrag);
     document.addEventListener('visibilitychange', () => { endDrag(); STATE.joyVector.x = 0; STATE.joyVector.y = 0; });
 
-    this.scale.on('resize', (size) => { this.cameras.main.setSize(size.width, size.height); });
+    this.scale.on('resize', (size) => { this.cameras.main.setSize(size.width, size.height); this.atmosphere.setSize(size.width,size.height); });
 
     initMinimap();
     redrawMinimap(true);
     updateHUD();
+    applyPendingSave();
   }
 
   update(time, delta){
     const dt = Math.min(delta, 50) / 1000;
-    if (STATE.combat || STATE.dialogue) { return; } // freeze exploration while a modal system is active
+    if (STATE.combat || isGameplayLocked()) { return; } // freeze exploration while any blocking UI is active
 
     // ---- gather SCREEN-SPACE intent, rebuilt from zero every frame (nothing persists) ----
     let sdx = 0, sdy = 0;
@@ -1816,8 +2008,21 @@ class WorldScene extends Phaser.Scene{
     updateEnemies(this, dt);
     updateNPCVisuals(this, dt);
     updateInteractProximity();
+    updateAtmosphere(this);
     redrawMinimap(false);
   }
+}
+function updateAtmosphere(scene){
+  const biome = biomeAt(Math.floor(STATE.player.x/TILE), Math.floor(STATE.player.y/TILE));
+  if (!biome) return;
+  const weatherActive = STATE.weatherOverride && STATE.weatherOverride.until>Date.now();
+  const key = biome.id+'|'+(weatherActive?STATE.weatherOverride.kind:'normal');
+  if (scene.currentAtmosphere===key) return;
+  scene.currentAtmosphere = key;
+  const profile = biomeVisualProfile(biome);
+  const color = weatherActive ? STATE.weatherOverride.color : profile.atmosphere;
+  const alpha = weatherActive ? STATE.weatherOverride.alpha : profile.alpha;
+  scene.atmosphere.setFillStyle(color, REDUCED_MOTION ? alpha*0.55 : alpha);
 }
 function collidesAt(px,py){
   const r = 10;
@@ -1835,6 +2040,14 @@ function processChunkStreaming(scene){
       if (!STATE.chunkCache.has(key) && STATE.chunkLoadQueue.indexOf(key)===-1) STATE.chunkLoadQueue.push(key);
     }
   }
+  // Keep movement responsive by prioritizing the nearest chunks and dropping stale work.
+  STATE.chunkLoadQueue = STATE.chunkLoadQueue.filter(key => {
+    const [cx,cy] = key.split(',').map(Number);
+    return chebyshev(cx,cy,pcx,pcy) <= VIEW_CHUNK_RADIUS;
+  }).sort((a,b) => {
+    const [ax,ay] = a.split(',').map(Number), [bx,by] = b.split(',').map(Number);
+    return chebyshev(ax,ay,pcx,pcy)-chebyshev(bx,by,pcx,pcy);
+  }).slice(0, (VIEW_CHUNK_RADIUS*2+1)**2);
   if (STATE.chunkLoadQueue.length){
     const key = STATE.chunkLoadQueue.shift();
     if (!STATE.chunkCache.has(key)){
@@ -1897,6 +2110,11 @@ function renderChunkToScene(scene, data){
   }
   data.isoMap = map;
   data.tileImage = layer; // kept under the old property name; destroy path handles both
+  data.propSprites = (data.props||[]).map(prop => {
+    const wx=(data.cx*CHUNK_SIZE+prop.localX)*TILE+TILE/2, wy=(data.cy*CHUNK_SIZE+prop.localY)*TILE+TILE/2;
+    const sx=projX(wx,wy), sy=projY(wx,wy);
+    return scene.add.image(sx,sy-18,prop.texture).setOrigin(0.5,1).setScale(prop.scale).setTint(prop.tint).setDepth(ENTITY_DEPTH_BASE+sy-2);
+  });
   data.poiSprites = data.pois.map(poi => {
     const shape = { village:'shape_square', ruins:'shape_square', camp:'shape_square', shrine:'shape_diamond', lair:'shape_triangle', portal:'shape_diamond', tower:'shape_triangle', cave:'shape_triangle' }[poi.kind] || 'shape_square';
     const sx = projX(poi.worldX, poi.worldY), sy = projY(poi.worldX, poi.worldY);
@@ -1904,7 +2122,7 @@ function renderChunkToScene(scene, data){
     const s = scene.add.image(sx, sy - 48, shape).setScale(0.65);
     s.setDepth(ENTITY_DEPTH_BASE + sy - 1);
     s.setTint(Phaser.Display.Color.HexStringToColor(poi.glyphColorHex).color);
-    scene.tweens.add({ targets: s, y: sy - 58, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    if (!REDUCED_MOTION) scene.tweens.add({ targets: s, y: sy - 58, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     return s;
   });
 }
@@ -1986,7 +2204,7 @@ function startZone(isRegen){
   STATE.npcs.forEach(n => { if (n.sprite) n.sprite.destroy(); }); STATE.npcs = [];
   STATE.enemies.forEach(e => { if (e.sprite) e.sprite.destroy(); }); STATE.enemies = [];
   STATE.pois = []; STATE.usedPOINames = new Set();
-  STATE.distanceAccum = 0; STATE.nextEventAt = 260;
+  STATE.distanceAccum = 0; STATE.nextEventAt = 220+getRunRng('events').range(0,260);
 
   STATE.noise = new NoiseFields(wc.seed+'|zone'+wc.zoneIndex);
   STATE.layoutSalt = hashToInt(wc.seed+'|layout|zone'+wc.zoneIndex) % 100000;
@@ -2039,14 +2257,15 @@ const ENGAGE_RANGE = 60;
 function generateNPCsAndQuests(isRegen){
   const wc = STATE.worldConfig;
   const rng = childRNG(wc.seed,'npcs',wc.zoneIndex);
-  const count = Math.min(MAX_NPCS, 6 + rng.int(0,3)); // 6-8, hard-capped at MAX_NPCS
+  const count = Math.min(MAX_NPCS, ((wc.generation&&wc.generation.npcCount)||6) + rng.int(0,3));
   const spawnPOI = STATE.pois.find(p=>p.kind==='village') || STATE.pois[0];
   const npcs = [];
   for (let i=0;i<count;i++){
     const tpl = pickNpcTemplate(rng, wc.genre);
     const name = generateName(rng, wc.genre, 'people');
     const place = spawnPOI ? spawnPOI.name : 'this place';
-    const faction = wc.factions.length ? rng.pick(wc.factions).name : 'the locals';
+    const factionDef = wc.factions.length ? rng.pick(wc.factions) : {id:'locals',name:'the locals'};
+    const faction = factionDef.name;
     const tokens = { name, place, faction };
     // place on walkable ground: retry with shrinking radius, falling back to the POI tile
     const anchorX = spawnPOI ? spawnPOI.worldX : STATE.player.x;
@@ -2060,7 +2279,7 @@ function generateNPCsAndQuests(isRegen){
     }
     const colorDesc = pickPOIDescriptor(rng, wc.genre, 'village');
     npcs.push({
-      id:'npc_'+i+'_'+wc.zoneIndex, name, role:tpl.role, genre:wc.genre, faction,
+      id:'npc_'+i+'_'+wc.zoneIndex, name, role:tpl.role, genre:wc.genre, faction, factionId:factionDef.id,
       motivation: fillTokens(rng.pick(tpl.motivationTemplates), tokens),
       backstory: fillTokens(rng.pick(tpl.backstoryTemplates), tokens),
       greeting: fillTokens(rng.pick(tpl.greetingLines), tokens),
@@ -2107,9 +2326,9 @@ function reanchorQuests(rng, npcs, spawnPOI){
         id:'q_'+wc.zoneIndex+'_new_'+i+'_'+hashToInt(npc.id+type).toString(36),
         type, npcId:npc.id, npcName:npc.name,
         title: fillTokens(tpl.titleTemplate, tokens), description: fillTokens(tpl.descriptionTemplate, tokens),
-        objective: fillTokens(tpl.objectiveTemplate, tokens), rewardFlavor: tpl.rewardFlavor,
+        objective: fillTokens(tpl.objectiveTemplate, tokens), rewardFlavor: fillTokens(tpl.rewardFlavor, tokens),
         status:'available', progress:0, target:count, targetPOIId:null, targetPOIKind, targetWord,
-        rewardXP: 30+i*15, rewardGold: 15+i*10,
+        issuerFactionId:npc.factionId, minRep:-2, repReward:2, rewardXP:30+i*15, rewardGold:15+i*10,
       };
       npc.questId = quest.id;
       extra.push(quest);
@@ -2137,10 +2356,10 @@ function generateQuestsForNPCs(rng, npcs, spawnPOI){
       title: fillTokens(tpl.titleTemplate, tokens),
       description: fillTokens(tpl.descriptionTemplate, tokens),
       objective: fillTokens(tpl.objectiveTemplate, tokens),
-      rewardFlavor: tpl.rewardFlavor,
+      rewardFlavor: fillTokens(tpl.rewardFlavor, tokens),
       status:'available', progress:0, target:count,
       targetPOIId:null, targetPOIKind, targetWord,
-      rewardXP: 30+i*15, rewardGold: 15+i*10,
+      issuerFactionId:npc.factionId, minRep:-2, repReward:2, rewardXP:30+i*15, rewardGold:15+i*10,
     });
     npc.questId = quests[quests.length-1].id;
   });
@@ -2208,18 +2427,24 @@ function drawPortrait(npc){
   ctx.beginPath(); ctx.moveTo(26,8); ctx.lineTo(38,24); ctx.lineTo(14,24); ctx.closePath(); ctx.fill();
 }
 function renderDialogueRoot(npc){
-  const rep = STATE.factionRep[npc.faction]||0;
+  const factionId = npc.factionId||stableId(npc.faction);
+  const rep = STATE.factionRep[factionId]||STATE.factionRep[npc.faction]||0;
   let text = npc.greeting;
   if (rep>=3) text = npc.highRep+' '+npc.greeting;
   else if (rep<=-3) text = npc.lowRep+' '+npc.greeting;
   $('dialogue-text').textContent = text;
   const choices = [];
-  choices.push({ label:'Tell me about this place.', action:() => { $('dialogue-text').textContent = npc.lore+(npc.linkedLorePillar?(' '+npc.linkedLorePillar):''); renderDialogueChoicesOnly(npc); } });
+  choices.push({ label:'Tell me about this place.', action:() => {
+    $('dialogue-text').textContent = npc.lore+(npc.linkedLorePillar?(' '+npc.linkedLorePillar):'');
+    if (!npc.loreShared && STATE.worldConfig.progressionFocus==='story'){ npc.loreShared=true; grantXP(4); showToast('+4 XP for uncovering local lore.','good'); }
+    renderDialogueChoicesOnly(npc);
+  } });
   choices.push({ label:'What drives you?', action:() => { $('dialogue-text').textContent = npc.motivation+' '+npc.backstory; renderDialogueChoicesOnly(npc); } });
   const quest = STATE.questLog.find(q => q.npcId===npc.id);
   if (quest){
     if (quest.status==='available'){
-      choices.push({ label:'"'+quest.title+'" — tell me more.', quest:true, action:() => {
+      const locked = rep < (quest.minRep===undefined?-2:quest.minRep);
+      choices.push({ label:locked ? 'Earn more trust to discuss "'+quest.title+'"' : '"'+quest.title+'" — tell me more.', quest:true, disabled:locked, action:() => {
         $('dialogue-text').textContent = npc.questOffer+' '+quest.description;
         renderDialogueChoicesForOffer(npc, quest);
       }});
@@ -2248,6 +2473,7 @@ function renderChoiceButtons(choices){
     const btn = document.createElement('button');
     btn.className = 'dlg-choice'+(c.quest?' quest':'');
     btn.innerHTML = c.quest ? '<b>'+escapeHtml(c.label)+'</b>' : escapeHtml(c.label);
+    btn.disabled = !!c.disabled;
     btn.addEventListener('click', c.action);
     host.appendChild(btn);
   });
@@ -2256,7 +2482,8 @@ function turnInQuest(quest, npc){
   quest.status = 'turned_in';
   STATE.player.gold += quest.rewardGold;
   grantXP(quest.rewardXP);
-  adjustFactionRep(npc.faction, 2);
+  const repGain=(quest.repReward||2)+(STATE.worldConfig.progressionFocus==='story'?1:0);
+  adjustFactionRep(quest.issuerFactionId||npc.factionId||stableId(npc.faction), repGain);
   const loot = pickLootItem(childRNG(STATE.worldConfig.seed,'questloot',quest.id), STATE.worldConfig.genre, 'uncommon', 'material');
   addItemToInventory(loot);
   showToast('Quest complete: '+quest.title+' (+'+quest.rewardXP+' XP, +'+quest.rewardGold+' gold)','good');
@@ -2296,7 +2523,11 @@ function updateInteractProximity(){
   });
   STATE.pois.forEach(poi => {
     const d = Math.hypot(STATE.player.x-poi.worldX, STATE.player.y-poi.worldY);
-    if (d<INTERACT_RANGE && !poi.discovered){ poi.discovered=true; showToast('Discovered: '+poi.name,'info'); checkPOIQuestProgress(poi); }
+    if (d<INTERACT_RANGE && !poi.discovered){
+      poi.discovered=true; showToast('Discovered: '+poi.name,'info');
+      if (STATE.worldConfig.progressionFocus==='exploration'){ grantXP(5); showToast('+5 XP for exploration.','good'); }
+      checkPOIQuestProgress(poi);
+    }
     if (d<nearestD){ nearestD=d; nearest={ type:'poi', ref:poi }; }
   });
   STATE.nearestInteractable = nearest;
@@ -2320,6 +2551,14 @@ function examinePOI(poi){
     STATE.player.hp = Math.min(STATE.player.maxHp, STATE.player.hp+healAmt);
     updateHUD();
     showToast('The shrine blesses you. +'+healAmt+' HP','good');
+  }
+  if (poi.dangerLevel>0 && !poi.encounterResolved){
+    poi.encounterResolved = true;
+    const rng = childRNG(STATE.worldConfig.seed, 'poi-encounter', poi.id);
+    const tier = clamp(poi.dangerLevel, 1, 3);
+    const tpl = pickEnemy(rng, STATE.worldConfig.genre, tier);
+    const scale = 1+(STATE.player.level-1)*0.1;
+    startCombat({ id:'poi_en_'+poi.id, name:tpl.name, tier, hp:Math.round(tpl.baseHP*scale), maxHp:Math.round(tpl.baseHP*scale), atk:Math.round(tpl.baseATK*scale), def:Math.round(tpl.baseDEF*scale), specialName:tpl.specialName, specialDesc:tpl.specialDesc, colorHex:tpl.spriteColorHex, sprite:null, ambush:true });
   }
 }
 function checkPOIQuestProgress(poi){
@@ -2375,9 +2614,10 @@ function updateEnemies(scene, dt){
   STATE.enemies.forEach(e => {
     e.wanderTimer -= dt;
     if (e.wanderTimer<=0){
-      e.wanderTimer = 2+Math.random()*2;
-      e.targetX = e.homeX+(Math.random()*2-1)*70;
-      e.targetY = e.homeY+(Math.random()*2-1)*70;
+      const rng = getRunRng('enemyMovement');
+      e.wanderTimer = 2+rng.range(0,2);
+      e.targetX = e.homeX+(rng.next()*2-1)*70;
+      e.targetY = e.homeY+(rng.next()*2-1)*70;
     }
     let walking = false;
     if (e.targetX!==undefined){
@@ -2446,7 +2686,7 @@ function playerCombatAction(kind){
   if (kind==='item'){ openCombatItemPicker(); return; }
   setCombatButtonsEnabled(false);
   if (kind==='attack'){
-    const dmg = Math.max(1, Math.round(STATE.player.atk*(0.85+Math.random()*0.3) - enemy.def*0.5));
+    const dmg = Math.max(1, Math.round(STATE.player.atk*(0.85+getRunRng('combat').next()*0.3) - enemy.def*0.5));
     enemy.hp = Math.max(0, enemy.hp-dmg);
     combatLog('You strike for '+dmg+' damage.');
     spawnDamageFloat(enemy.sprite, dmg, '#ffffff');
@@ -2457,12 +2697,12 @@ function playerCombatAction(kind){
     const cost = STATE.player.archetype.specialCost;
     if (STATE.player.energy < cost){ combatLog('Not enough energy for '+STATE.player.archetype.specialName+'.'); setCombatButtonsEnabled(true); return; }
     STATE.player.energy -= cost;
-    const dmg = Math.max(1, Math.round(STATE.player.atk*1.7*(0.9+Math.random()*0.3) - enemy.def*0.3));
+    const dmg = Math.max(1, Math.round(STATE.player.atk*1.7*(0.9+getRunRng('combat').next()*0.3) - enemy.def*0.3));
     enemy.hp = Math.max(0, enemy.hp-dmg);
     combatLog('You unleash '+STATE.player.archetype.specialName+' for '+dmg+' damage!');
     spawnDamageFloat(enemy.sprite, dmg, '#9f7fe0');
   } else if (kind==='flee'){
-    if (Math.random() < 0.65){ combatLog('You slip away.'); endCombat(); return; }
+    if (getRunRng('combat').chance(0.65)){ combatLog('You slip away.'); endCombat(); return; }
     combatLog('You couldn\'t get away!');
   }
   updateCombatBars(); updateHUD();
@@ -2473,15 +2713,30 @@ function playerCombatAction(kind){
 function enemyCombatTurn(){
   const c = STATE.combat; if (!c) return;
   const enemy = c.enemy;
-  let dmg = Math.max(1, Math.round(enemy.atk*(0.85+Math.random()*0.3) - STATE.player.def*0.5));
+  const rng = getRunRng('combat');
+  const special = rng.chance(0.28);
+  let dmg = Math.max(1, Math.round(enemy.atk*(0.85+rng.next()*0.3) - STATE.player.def*0.5));
+  const specialKind = inferEnemySpecial(enemy.specialName);
+  if (special){
+    if (specialKind==='burst') dmg = Math.round(dmg*1.45);
+    if (specialKind==='drain') enemy.hp = Math.min(enemy.maxHp, enemy.hp+Math.max(1,Math.round(dmg*0.5)));
+    if (specialKind==='weaken') STATE.combat.playerWeakened = true;
+  }
+  if (c.playerWeakened) dmg = Math.round(dmg*1.2);
   if (c.playerDefending){ dmg = Math.round(dmg*0.4); c.playerDefending = false; }
   STATE.player.hp = Math.max(0, STATE.player.hp-dmg);
-  combatLog(enemy.name+' hits you for '+dmg+' damage.');
+  combatLog(enemy.name+(special ? ' uses '+enemy.specialName : ' hits you')+' for '+dmg+' damage.'+(special&&specialKind==='drain'?' It restores health.':special&&specialKind==='weaken'?' You are weakened.':''));
   spawnDamageFloat(STATE.playerSpriteRef, dmg, '#e0594c');
   updateCombatBars(); updateHUD();
   if (STATE.player.hp<=0){ loseCombat(); return; }
   c.turn = 'player'; $('combat-turn-pill').textContent = 'Your Turn';
   setCombatButtonsEnabled(true);
+}
+function inferEnemySpecial(name){
+  const text = String(name||'').toLowerCase();
+  if (/drain|leech|siphon|unmaking/.test(text)) return 'drain';
+  if (/wail|bind|suppress|gaze|mark/.test(text)) return 'weaken';
+  return 'burst';
 }
 function openCombatItemPicker(){
   const usable = STATE.player.inventory.filter(it => it.itemType==='consumable');
@@ -2500,18 +2755,20 @@ function openCombatItemPicker(){
 function spawnDamageFloat(target, amount, color){
   if (!target || !STATE.scene) return;
   const txt = STATE.scene.add.text(target.x, target.y-24, '-'+amount, { fontSize:'16px', fontStyle:'bold', color: color||'#ffffff', stroke:'#000000', strokeThickness:3 }).setDepth(210).setOrigin(0.5);
-  STATE.scene.tweens.add({ targets:txt, y: target.y-56, alpha:0, duration:700, onComplete:() => txt.destroy() });
+  if (REDUCED_MOTION) STATE.scene.time.delayedCall(350, () => txt.destroy());
+  else STATE.scene.tweens.add({ targets:txt, y: target.y-56, alpha:0, duration:700, onComplete:() => txt.destroy() });
 }
 function winCombat(){
   const c = STATE.combat; const enemy = c.enemy;
   combatLog('You defeated the '+enemy.name+'!');
   const xp = 12+enemy.tier*10;
-  const gold = 5+enemy.tier*8+Math.floor(Math.random()*10);
+  const rng = getRunRng('loot');
+  const gold = 5+enemy.tier*8+rng.int(0,10);
   STATE.player.gold += gold;
   grantXP(xp);
-  const rarity = enemy.tier>=3 ? (Math.random()<0.3?'rare':'uncommon') : (enemy.tier===2 ? (Math.random()<0.4?'uncommon':'common') : 'common');
+  const rarity = enemy.tier>=3 ? (rng.chance(0.3)?'rare':'uncommon') : (enemy.tier===2 ? (rng.chance(0.4)?'uncommon':'common') : 'common');
   const itemTypes = ['weapon','armor','consumable','material'];
-  const loot = pickLootItem(new RNG(String(Math.random())), STATE.worldConfig.genre, rarity, itemTypes[Math.floor(Math.random()*itemTypes.length)]);
+  const loot = pickLootItem(rng, STATE.worldConfig.genre, rarity, rng.pick(itemTypes));
   addItemToInventory(loot);
   showToast('Victory! +'+xp+' XP, +'+gold+' gold, found '+loot.nameTemplate,'good');
   STATE.questLog.forEach(q => {
@@ -2530,12 +2787,14 @@ function loseCombat(){
   const goldLoss = Math.round(STATE.player.gold*0.15);
   STATE.player.gold -= goldLoss;
   showToast('Defeated. Lost '+goldLoss+' gold — you wake back at the village.','bad');
-  endCombat();
+  endCombat(false);
   reviveAtSpawn();
+  saveGame();
 }
-function endCombat(){
+function endCombat(shouldSave=true){
   STATE.combat = null;
   closeSheet('panel-combat');
+  if (shouldSave) saveGame();
 }
 function initCombatButtons(){
   $('cbt-attack').addEventListener('click', () => playerCombatAction('attack'));
@@ -2555,7 +2814,7 @@ function addItemToInventory(itemTemplate){
   if (existing){ existing.qty++; }
   else {
     STATE.player.inventory.push({
-      uid:'it_'+Math.floor(Math.random()*1e9), name:itemTemplate.nameTemplate, itemType:itemTemplate.itemType,
+      uid:'it_'+getRunRng('ids').int(0,1e9), name:itemTemplate.nameTemplate, itemType:itemTemplate.itemType,
       rarity:itemTemplate.rarity, statBonusDesc:itemTemplate.statBonusDesc, flavorText:itemTemplate.flavorText, qty:1,
     });
   }
@@ -2622,7 +2881,7 @@ function renderInventoryPanel(){
   const grid = $('inv-grid'); grid.innerHTML = '';
   if (!STATE.player.inventory.length){ grid.innerHTML = '<div class="empty-note" style="grid-column:1/-1;">Inventory is empty. Explore, fight, and complete quests to find gear.</div>'; return; }
   STATE.player.inventory.forEach(item => {
-    const slot = document.createElement('div'); slot.className = 'inv-slot'+(item.rarity==='rare'?' rare':(item.rarity==='uncommon'?' uncommon':''));
+    const slot = document.createElement('button'); slot.type='button'; slot.className = 'inv-slot'+(item.rarity==='rare'?' rare':(item.rarity==='uncommon'?' uncommon':''));
     slot.innerHTML = '<div class="ic">'+(ITEM_ICONS[item.itemType]||'❔')+'</div><div class="nm">'+escapeHtml(item.name)+'</div>'+(item.qty>1?'<div class="qty">x'+item.qty+'</div>':'');
     slot.title = item.flavorText+' ('+item.statBonusDesc+')';
     slot.addEventListener('click', () => useItem(item));
@@ -2671,23 +2930,30 @@ function showLevelUpModal(growth){
 function updateHUD(){
   $('hud-name').textContent = STATE.player.name;
   $('hud-lvl').textContent = 'Lv'+STATE.player.level;
-  $('hud-hp-fill').style.width = Math.round(clamp01(STATE.player.hp/STATE.player.maxHp)*100)+'%';
-  $('hud-xp-fill').style.width = Math.round(clamp01(STATE.player.xp/STATE.player.xpToNext)*100)+'%';
+  const hpPct=Math.round(clamp01(STATE.player.hp/STATE.player.maxHp)*100), xpPct=Math.round(clamp01(STATE.player.xp/STATE.player.xpToNext)*100);
+  $('hud-hp-fill').style.width = hpPct+'%'; $('hud-hp-bar').setAttribute('aria-valuenow',String(hpPct));
+  $('hud-xp-fill').style.width = xpPct+'%'; $('hud-xp-bar').setAttribute('aria-valuenow',String(xpPct));
   $('hud-gold').textContent = '⛁ '+STATE.player.gold+' gold';
 }
 
 /* ==================================================================
    23. FACTION REPUTATION + WORLD/LORE PANEL
    ================================================================== */
-function adjustFactionRep(factionName, delta){
-  STATE.factionRep[factionName] = clamp((STATE.factionRep[factionName]||0)+delta, -10, 10);
+function adjustFactionRep(factionId, delta){
+  STATE.factionRep[factionId] = clamp((STATE.factionRep[factionId]||0)+delta, -10, 10);
+  const wc = STATE.worldConfig;
+  if (wc.factionRelation!=='pick_side') return;
+  const relations = (wc.factionRelations&&wc.factionRelations[factionId])||{};
+  Object.entries(relations).forEach(([otherId, relation]) => {
+    if (relation<0) STATE.factionRep[otherId] = clamp((STATE.factionRep[otherId]||0)-Math.max(1,Math.round(delta/2)), -10, 10);
+  });
 }
 function renderWorldPanel(){
   const loreHost = $('world-lore-list'); loreHost.innerHTML = '';
   STATE.worldConfig.lorePillars.forEach(p => { const d = document.createElement('div'); d.className='lore-pillar'; d.textContent=p; loreHost.appendChild(d); });
   const factHost = $('world-factions'); factHost.innerHTML = '';
   STATE.worldConfig.factions.forEach(f => {
-    const rep = STATE.factionRep[f.name]||0;
+    const rep = STATE.factionRep[f.id]||STATE.factionRep[f.name]||0;
     const pct = Math.round(((rep+10)/20)*100);
     const row = document.createElement('div'); row.className='faction-row';
     row.innerHTML = '<div class="fn" title="'+escapeHtml(f.description)+'">'+escapeHtml(f.name)+'</div><div class="track"><div class="mid"></div><div class="fill" style="width:'+pct+'%;"></div></div><div class="fv">'+(rep>0?'+':'')+rep+'</div>';
@@ -2704,7 +2970,7 @@ function accumulateExplorationDistance(dist){
   STATE.distanceAccum += dist;
   if (STATE.distanceAccum >= STATE.nextEventAt){
     STATE.distanceAccum = 0;
-    STATE.nextEventAt = 220+Math.random()*260;
+    STATE.nextEventAt = 220+getRunRng('events').range(0,260);
     triggerExplorationEvent();
   }
 }
@@ -2714,19 +2980,21 @@ function triggerExplorationEvent(){
   const styleBias = wc.eventStyle==='chaotic' ? 1.5 : (wc.eventStyle==='calm' ? 0.55 : 1.0);
   const weights = EVENT_TYPES_LIST.map(t => t==='ambush' ? styleBias*(1+(wc.difficulty==='harsh'?0.4:0)) : 1);
   const total = weights.reduce((a,b)=>a+b,0);
-  let r = Math.random()*total, type = EVENT_TYPES_LIST[0];
+  const rng = getRunRng('events');
+  let r = rng.next()*total, type = EVENT_TYPES_LIST[0];
   for (let i=0;i<EVENT_TYPES_LIST.length;i++){ r -= weights[i]; if (r<=0){ type = EVENT_TYPES_LIST[i]; break; } }
-  const tpl = pickEventTemplate(new RNG(String(Math.random())), type, wc.genre);
+  const tpl = pickEventTemplate(rng, type, wc.genre);
   runEvent(type, tpl);
 }
 function runEvent(type, tpl){
   const wc = STATE.worldConfig;
   if (type==='ambush'){
     const tier = clamp(1+Math.floor(STATE.player.level/3), 1, 3);
-    const enemyTpl = pickEnemy(new RNG(String(Math.random())), wc.genre, tier);
+    const rng = getRunRng('events');
+    const enemyTpl = pickEnemy(rng, wc.genre, tier);
     const levelScale = 1+(STATE.player.level-1)*0.1;
     const enemy = {
-      id:'ev_en_'+Math.floor(Math.random()*1e9), name:enemyTpl.name, tier,
+      id:'ev_en_'+getRunRng('ids').int(0,1e9), name:enemyTpl.name, tier,
       hp:Math.round(enemyTpl.baseHP*levelScale), maxHp:Math.round(enemyTpl.baseHP*levelScale),
       atk:Math.round(enemyTpl.baseATK*levelScale), def:Math.round(enemyTpl.baseDEF*levelScale),
       specialName:enemyTpl.specialName, specialDesc:enemyTpl.specialDesc, colorHex:enemyTpl.spriteColorHex,
@@ -2738,18 +3006,25 @@ function runEvent(type, tpl){
     showToast(tpl.flavorText,'info');
     openMerchantModal();
   } else if (type==='relic_discovery' || type==='hidden_cache'){
-    const rarity = type==='hidden_cache' ? 'uncommon' : (Math.random()<0.3?'rare':'common');
+    const rng = getRunRng('events');
+    const rarity = type==='hidden_cache' ? 'uncommon' : (rng.chance(0.3)?'rare':'common');
     const itemTypes = ['weapon','armor','consumable','relic','material'];
-    const item = pickLootItem(new RNG(String(Math.random())), wc.genre, rarity, itemTypes[Math.floor(Math.random()*itemTypes.length)]);
+    const item = pickLootItem(rng, wc.genre, rarity, rng.pick(itemTypes));
     addItemToInventory(item);
     let goldBonus = 0;
-    if (type==='hidden_cache'){ goldBonus = 10+Math.floor(Math.random()*20); STATE.player.gold += goldBonus; updateHUD(); }
+    if (type==='hidden_cache'){ goldBonus = 10+rng.int(0,20); STATE.player.gold += goldBonus; updateHUD(); }
     showToast(tpl.flavorText+' Found '+item.nameTemplate+(goldBonus?(' and '+goldBonus+' gold'):''),'good');
   } else if (type==='weather_shift'){
+    const weather = {
+      fantasy:{kind:'silver rain',color:0x35546b,alpha:0.13}, scifi:{kind:'ion haze',color:0x37528a,alpha:0.12},
+      horror:{kind:'black fog',color:0x261b33,alpha:0.16}, post_apocalyptic:{kind:'ash storm',color:0x6b3d24,alpha:0.14},
+    }[wc.genre];
+    STATE.weatherOverride = {...weather,until:Date.now()+30000};
+    if (STATE.scene) STATE.scene.currentAtmosphere='';
     showToast(tpl.flavorText,'info');
   } else if (type==='lore_vision'){
     showToast(tpl.flavorText,'info');
-    const pillar = wc.lorePillars[Math.floor(Math.random()*wc.lorePillars.length)];
+    const pillar = getRunRng('events').pick(wc.lorePillars);
     openModal('<h2>A Vision</h2><p>'+escapeHtml(pillar)+'</p><button class="btn btn-primary btn-block" id="modal-ok-btn">Continue</button>');
     $('modal-ok-btn').addEventListener('click', closeModal);
   } else if (type==='shrine_blessing'){
@@ -2758,17 +3033,19 @@ function runEvent(type, tpl){
     updateHUD();
     showToast(tpl.flavorText+' +'+healAmt+' HP','good');
   } else if (type==='wanderer_encounter'){
-    const goldAmt = 5+Math.floor(Math.random()*15);
+    const goldAmt = 5+getRunRng('events').int(0,15);
     STATE.player.gold += goldAmt; updateHUD();
     showToast(tpl.flavorText+' +'+goldAmt+' gold','good');
   }
 }
 function openMerchantModal(){
   const wc = STATE.worldConfig;
-  const rng = new RNG(String(Math.random()));
+  const rng = getRunRng('merchant');
   const itemTypes = ['weapon','armor','consumable'];
-  const items = [0,1,2].map(i => pickLootItem(rng, wc.genre, rng.chance(0.25)?'uncommon':'common', itemTypes[i%itemTypes.length]));
-  const prices = items.map(it => it.rarity==='uncommon' ? 40+Math.floor(Math.random()*20) : 15+Math.floor(Math.random()*15));
+  const techTier = (wc.generation&&wc.generation.techTier)||0;
+  const count = 3 + techTier + rng.int(0,2);
+  const items = Array.from({length:count}, (_,i) => pickLootItem(rng, wc.genre, rng.chance(0.25+techTier*0.08)?'uncommon':'common', itemTypes[i%itemTypes.length]));
+  const prices = items.map(it => it.rarity==='uncommon' ? 40+rng.int(0,20) : 15+rng.int(0,15));
   let html = '<h2>Traveling Merchant</h2><p>Gold: '+STATE.player.gold+'</p>';
   items.forEach((it,i) => {
     html += '<div class="row between" style="margin-bottom:10px;text-align:left;"><div><b>'+escapeHtml(it.nameTemplate)+'</b><br><small style="color:var(--text-dim);">'+escapeHtml(it.statBonusDesc)+'</small></div><button class="btn btn-sm" data-buy="'+i+'">'+prices[i]+'g</button></div>';
@@ -2813,6 +3090,7 @@ function initGameActionBar(){
   $('ab-quests').addEventListener('click', () => { renderQuestLog(); openSheet('panel-quests'); });
   $('ab-inventory').addEventListener('click', () => { renderInventoryPanel(); openSheet('panel-inventory'); });
   $('ab-world').addEventListener('click', () => { renderWorldPanel(); openSheet('panel-world'); });
+  $('ab-save').addEventListener('click', saveGame);
   $('ab-interact').addEventListener('click', doInteract);
   $('ab-regen').addEventListener('click', regenerateZone);
   document.querySelectorAll('[data-close]').forEach(btn => {
@@ -2825,7 +3103,8 @@ function initGameActionBar(){
    27. BOOT FLOW
    ================================================================== */
 function bootGame(worldConfig, playerChoice){
-  STATE.worldConfig = worldConfig;
+  STATE.worldConfig = normalizeWorldConfig(worldConfig);
+  STATE.rngStreams = {};
   const a = playerChoice.archetype;
   STATE.player.name = playerChoice.name;
   STATE.player.archetype = a;
@@ -2837,9 +3116,10 @@ function bootGame(worldConfig, playerChoice){
   STATE.factionRep = {}; STATE.questLog = [];
 
   showScreen('screen-game');
-  setupJoystick();
-  initCombatButtons();
-  initGameActionBar();
+  if (!STATE.controlsInitialized){
+    setupJoystick(); initCombatButtons(); initGameActionBar();
+    STATE.controlsInitialized = true;
+  }
 
   if (!STATE.game){
     STATE.game = new Phaser.Game({
@@ -2869,14 +3149,14 @@ window.__pr = {
   questLog: () => STATE.questLog,
   grantItem: (rarity, itemType) => {
     const g = STATE.worldConfig ? STATE.worldConfig.genre : 'fantasy';
-    const item = pickLootItem(new RNG(String(Math.random())), g, rarity||'common', itemType||'weapon');
+    const item = pickLootItem(getRunRng('debug'), g, rarity||'common', itemType||'weapon');
     addItemToInventory(item);
     return item;
   },
   grantXP: (n) => grantXP(n||50),
   forceCombat: () => {
     const g = STATE.worldConfig ? STATE.worldConfig.genre : 'fantasy';
-    const tpl = pickEnemy(new RNG(String(Math.random())), g, 1);
+    const tpl = pickEnemy(getRunRng('debug'), g, 1);
     startCombat({ id:'test_en', name:tpl.name, tier:1, hp:tpl.baseHP, maxHp:tpl.baseHP, atk:tpl.baseATK, def:tpl.baseDEF, specialName:tpl.specialName, specialDesc:tpl.specialDesc, colorHex:tpl.spriteColorHex, sprite:null });
   },
   regenerateZone: () => regenerateZone(),
@@ -2901,6 +3181,7 @@ function initApp(){
   initTitleScreen();
   initSummaryScreen();
   initCreatorScreen();
+  initDialogKeyboard();
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initApp);
 else initApp();

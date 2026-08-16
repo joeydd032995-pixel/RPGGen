@@ -4,8 +4,9 @@
 world in a sentence and it generates a genre, biomes, factions, NPCs, quests, and a walkable
 isometric overworld you can explore, fight through, and regenerate on the fly.
 
-Everything lives in a single `index.html` (Phaser 3 loaded from CDN), with a small `assets/`
-folder for the isometric art.
+The playable runtime remains in `index.html` (Phaser 3 loaded from CDN), with a small `assets/`
+folder for the isometric art. The repository now includes a lightweight Vite build and Node test
+command for repeatable delivery checks.
 
 ## Play
 
@@ -20,6 +21,34 @@ python3 -m http.server 8000
 GitHub Pages (or any static host) works too — just keep `index.html` and the `assets/` folder
 side by side. If the art ever fails to load, the game falls back to procedurally generated
 placeholder tiles and characters so it still runs.
+
+## Development
+
+```
+npm install
+npm test
+npm run build
+npm run serve
+```
+
+The game uses a deterministic seed for world and runtime random streams. Use the in-game **Save**
+button to retain character progression, quests, inventory, faction reputation, and random-stream
+state in browser storage; **Continue Saved Adventure** appears on the title screen when a valid
+save is available.
+
+World scale now controls settlement and landmark density, magic/technology affects merchant stock,
+faction allegiance changes reputation with rival powers, and dangerous landmarks trigger seeded
+encounters. Procedural biome props, climate tinting, temporary weather, keyboard-safe dialogs, and
+reduced-motion support provide a richer presentation without requiring additional downloads.
+
+## Software renderer prototype
+
+`software-renderer.html` is a standalone clean-room CPU rasterizer demo with flat, packed-HSL
+Gouraud, and pre-shaded 128x128 textured triangle paths. It also includes deterministic framebuffer
+hashes and priority/depth-bucket ordering. See `docs/software-renderer.md` for the implemented pixel
+contract and the remaining work required before claiming parity with a specific classic client.
+Selected CC0 Kenney scenery is loaded through the renderer's GLB converter; the approved character,
+equipment, and interface sourcing plan is recorded in `docs/asset-sourcing.md`.
 
 ## Controls
 
