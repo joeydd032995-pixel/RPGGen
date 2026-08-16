@@ -135,7 +135,7 @@ export class GameplayView{
   }
 
   resize(){
-    const rect=this.canvas.getBoundingClientRect(),portrait=rect.height>rect.width*1.2,width=portrait?256:384,height=portrait?384:240;
+    const rect=this.canvas.getBoundingClientRect(),portrait=rect.height>rect.width*1.2,width=portrait?288:384,height=portrait?Math.round(width*rect.height/Math.max(1,rect.width)):240;
     if(this.canvas.width===width&&this.canvas.height===height)return;
     this.canvas.width=width;this.canvas.height=height;this.surface=createSurface(width,height);this.terrainKey='';
   }
@@ -155,7 +155,7 @@ export class GameplayView{
 
   camera(){
     const portrait=this.surface.height>this.surface.width;
-    return{x:0,y:portrait?160:145,z:-210,yaw:0,pitch:portrait?-.58:-.52,focalLength:this.surface.width*(portrait?1.15:.95),centerX:this.surface.width/2,centerY:this.surface.height*.68,near:12,far:1000};
+    return{x:0,y:portrait?145:145,z:portrait?-235:-210,yaw:0,pitch:portrait?-.72:-.52,focalLength:this.surface.width*(portrait?1.55:.95),centerX:this.surface.width/2,centerY:this.surface.height*(portrait?.64:.68),near:12,far:1000};
   }
 
   render(snapshot,time=performance.now()){
@@ -166,16 +166,16 @@ export class GameplayView{
     enqueueModel(queue,this.terrain,{...options,transform:{x:(snapshot.terrain.originX-snapshot.player.x)*WORLD_SCALE,z:(snapshot.terrain.originY-snapshot.player.y)*WORLD_SCALE}});
 
     const coordinates=(entity)=>({x:(entity.x-snapshot.player.x)*WORLD_SCALE,z:PLAYER_Z+(entity.y-snapshot.player.y)*WORLD_SCALE});
-    const visible=({x,z})=>Math.abs(x)<260&&z>-35&&z<390;
+    const visible=({x,z})=>Math.abs(x)<260&&z>-210&&z<390;
     const place=(model,entity,scale=1,shadowScale=1)=>{const point=coordinates(entity);if(!visible(point))return null;if(shadowScale)enqueueModel(queue,this.shadow,{...options,transform:{...point,y:.15,scale:shadowScale}});enqueueModel(queue,model,{...options,transform:{...point,y:entity.elevation||1,scale,rotationY:entity.rotationY||0}});return point;};
 
     for(const building of snapshot.buildings){place(this.hut,building,1.15,0);for(let i=-1;i<=1;i++)place(this.fence,{x:building.x+i*29,y:building.y+38,rotationY:building.rotationY},1.05,0);}
-    for(const prop of snapshot.props.slice(0,18)){const point=coordinates(prop);if(!visible(point))continue;const model=prop.kind==='rock'?this.assets.rock:prop.kind==='bush'?this.assets.bush:this.assets.tree,scale=prop.kind==='tree'?22:prop.kind==='rock'?10:14;enqueueModel(queue,model,{...options,transform:{...point,y:0,scale,rotationY:prop.rotation}});}
+    for(const prop of snapshot.props.slice(0,24)){const point=coordinates(prop);if(!visible(point))continue;const model=prop.kind==='rock'?this.assets.rock:prop.kind==='bush'?this.assets.bush:this.assets.tree,scale=prop.kind==='tree'?22:prop.kind==='rock'?10:14;enqueueModel(queue,model,{...options,transform:{...point,y:0,scale,rotationY:prop.rotation}});}
 
-    snapshot.npcs.slice(0,8).forEach((npc,index)=>{let model,scale,shadowScale;if(index<this.npcModels.length){model=this.npcModels[index];scale=17;shadowScale=.9;}else{const key=npc.color+'|'+index%4;model=this.people.get(key);if(!model){model=makeVillager(npc.color,index%4);this.people.set(key,model);}scale=.54;shadowScale=.72;}place(model,npc,scale,shadowScale);if(npc.quest)place(this.marker,{...npc,elevation:46},.5,0);});
+    snapshot.npcs.slice(0,8).forEach((npc,index)=>{const dx=npc.x-snapshot.player.x,dy=npc.y-snapshot.player.y;if(Math.hypot(dx,dy)<28||(Math.abs(dx)<38&&dy>0&&dy<115))return;let model,scale,shadowScale;if(index<this.npcModels.length){model=this.npcModels[index];scale=17;shadowScale=.9;}else{const key=npc.color+'|'+index%4;model=this.people.get(key);if(!model){model=makeVillager(npc.color,index%4);this.people.set(key,model);}scale=.54;shadowScale=.72;}place(model,npc,scale,shadowScale);if(npc.quest)place(this.marker,{...npc,elevation:46},.5,0);});
     snapshot.enemies.slice(0,4).forEach(enemy=>{const point=place(this.dragon,enemy,.62,1.65);if(point)enemyIndicators.push({...point,hp:enemy.hp,maxHp:enemy.maxHp});});
     const playerModel=snapshot.player.moving?this.playerModels.walk[Math.floor(time/110)%this.playerModels.walk.length]:this.playerModels.idle;
-    place(playerModel,{...snapshot.player,rotationY:(snapshot.player.facing||0)*Math.PI/4+Math.PI},19,1);
+    place(playerModel,{...snapshot.player,rotationY:(snapshot.player.facing||0)*Math.PI/4+Math.PI},this.surface.height>this.surface.width?22:19,1);
     renderCommands(this.surface,queue,this.palette);
 
     for(const enemy of enemyIndicators){const view=transformToView({x:enemy.x,y:68,z:enemy.z},camera);if(view.z<=camera.near)continue;const screen=projectViewPoint(view,camera);drawBar(this.surface,Math.round(screen.x-14),Math.round(screen.y),28,enemy.hp,enemy.maxHp,{track:0x241916,fill:0xd94b3d,border:0xe7d8ad});}
