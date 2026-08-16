@@ -35,7 +35,9 @@ test('primary gameplay uses the responsive textured low-poly world view', () => 
   assert.match(source,/function buildSoftwareWorldSnapshot\(\)/);
   assert.match(source,/softwareView\.render\(buildSoftwareWorldSnapshot\(\),time\)/);
   assert.match(source,/src="\.\/src\/gameplay-view\.mjs"/);
-  assert.match(source,/const path=clearing&&\(Math\.abs\(spawnDX\)<=1\|\|Math\.abs\(spawnDY\)<=1\)/);
+  assert.match(source,/const columns=19,rows=43/);
+  assert.match(source,/const clearing=Math\.max\(Math\.abs\(spawnDX\),Math\.abs\(spawnDY\)\)<22/);
+  assert.match(source,/const path=clearing&&\(spawnDX===0\|\|spawnDY===0\)/);
 });
 
 test('interactive overlays expose accessibility semantics', () => {
