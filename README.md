@@ -50,10 +50,6 @@ contract and the remaining work required before claiming parity with a specific 
 Selected CC0 Kenney scenery is loaded through the renderer's GLB converter; the approved character,
 equipment, and interface sourcing plan is recorded in `docs/asset-sourcing.md`.
 
-The primary game also composites a throttled 320x200 software-rendered world from live terrain,
-player, NPC, enemy, and streamed-prop state. Phaser remains responsible for deterministic movement,
-collision, interaction proximity, and UI input beneath that presentation layer.
-
 ## Controls
 
 - **Keyboard:** WASD / arrow keys to move.
